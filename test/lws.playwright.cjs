@@ -5,24 +5,28 @@ const source = readFileSync(resolve(__dirname, '../src/widget.js'), 'utf8')
   .replace(/^import .*;$/gm, '').replace('export default Widget;', 'window.Widget = Widget;');
 const template = readFileSync(resolve(__dirname, '../src/assets/widget.html'), 'utf8');
 const css = readFileSync(resolve(__dirname, '../src/assets/styles.css'), 'utf8');
-async function setup(page, { fails = false, available = true } = {}) {
+async function setup(page, { fails = false, available = true, openid = false, resumeError = false } = {}) {
   await page.setContent('<main id="target"></main>');
   await page.addScriptTag({ content: 'const widgetHtml=' + JSON.stringify(template) + ';const widgetCss=' + JSON.stringify(css) + ';const circleOpenSvg="";\n' + source });
-  await page.evaluate(({ fails, available }) => {
+  await page.evaluate(({ fails, available, openid, resumeError }) => {
     const handlers = {};
     window.rs = { apiKeys: { dropbox: 'test', googledrive: 'test' }, remote: { online: true }, backend: 'remotestorage',
       on(name, fn) { (handlers[name] ||= []).push(fn); },
       hasFeature() { return true; }, disconnect() {}, startSync() {}, stopSync() {},
       dropbox: { connect() {} }, googledrive: { connect() {} }, solid: { connect() {} }
     };
-    if (available) window.rs.lws = { setStorageURL(value) { window.enteredStorageURL = value; }, async connect() {
+    if (available) window.rs.lws = {
+      configureOpenID(options) { window.lwsOpenIDOptions = options; },
+      async handleIncomingRedirect() { window.lwsCallbackHandled = true; if (resumeError) throw new Error('LWS sign-in state expired or changed.'); return false; },
+      setStorageURL(value) { window.enteredStorageURL = value; }, async connect() {
       if (fails) throw new Error('The server did not expose its LWS storage Link header.');
       window.rs.remote.userAddress = 'https://pods.example/alice'; window.rs.backend = 'lws';
       for (const fn of handlers.connected || []) fn();
     } };
-    window.widget = new window.Widget(window.rs, { skipInitial: true, leaveOpen: true, modalBackdrop: false });
+    window.widget = new window.Widget(window.rs, { skipInitial: true, leaveOpen: true, modalBackdrop: false,
+      lwsOpenID: openid ? { issuer: 'https://identity.example', clientId: 'https://app.example/client', redirectUri: 'https://app.example/callback' } : undefined });
     window.widget.attach('target');
-  }, { fails, available });
+  }, { fails, available, openid, resumeError });
 }
 test('existing chooser opens LWS storage URL form and reaches connected state', async ({ page }) => {
   await setup(page);
@@ -55,4 +59,14 @@ test('storage URL form fits a narrow screen', async ({ page }) => {
   await page.locator('.rs-choose-lws').click();
   await expect(page.getByLabel('Storage address')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+});
+test('application OpenID options configure LWS and resume its callback on attachment', async ({ page }) => {
+  await setup(page, { openid: true });
+  expect(await page.evaluate(() => window.lwsOpenIDOptions.issuer)).toBe('https://identity.example');
+  expect(await page.evaluate(() => window.lwsCallbackHandled)).toBe(true);
+});
+test('callback failures are shown in the existing LWS connection screen', async ({ page }) => {
+  await setup(page, { openid: true, resumeError: true });
+  await expect(page.locator('.rs-widget')).toHaveClass(/rs-state-lws/);
+  await expect(page.locator('.rs-lws-error')).toContainText('state expired');
 });
