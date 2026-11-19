@@ -1,0 +1,42 @@
+name: Browser tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build && npm test
+      - name: Check out the rs.js Solid backend
+        uses: actions/checkout@v4
+        with:
+          repository: remotestorage/remotestorage.js
+          ref: c0f41cb89aba7e45524897e7d7fde190f6d57144
+          path: .rs-solid
+      - run: npm ci && npm run build:js && npm run build:solid
+        working-directory: .rs-solid
+      - run: npm ci
+        working-directory: .rs-solid/examples/solid
+      - name: Test against Community Solid Server
+        env:
+          RS_SOLID_SOURCE: ${{ github.workspace }}/.rs-solid
+          RS_SOLID_TEST_PASSWORD: disposable-widget-test-password
+        run: |
+          (cd .rs-solid/examples/solid && node tests/server.cjs) > /tmp/solid-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID"; cat /tmp/solid-server.log' EXIT
+          for attempt in {1..60}; do
+            if curl --fail --silent http://localhost:3000/.well-known/openid-configuration >/dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:solid

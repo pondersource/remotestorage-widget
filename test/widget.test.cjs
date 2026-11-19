@@ -40,9 +40,9 @@ test('four backends, login validation, async failure and retry', async t => {
  await p.locator('.rs-choose-rs').click(); await p.locator('[name=rs-user-address]').fill('alice@example.test'); await p.locator('.rs-connect').click();
  await p.evaluate(()=>widget.showChooseOrSignIn()); await p.locator('.rs-choose-solid').click();
  await p.locator('[name=rs-provider-address]').fill('http://example.test'); await p.locator('.rs-solid-connect').click();
- assert.match(await p.locator('.rs-solid-form').innerText(), /Use HTTPS/);
+ assert.match(await p.locator('.rs-box-solid').innerText(), /Use HTTPS/);
  await p.evaluate(()=>window.failLogin=true); await p.locator('[name=rs-provider-address]').fill('https://example.test'); await p.locator('.rs-solid-connect').click();
- assert.match(await p.locator('.rs-solid-form').innerText(), /Login failed/);
+ assert.match(await p.locator('.rs-box-solid').innerText(), /Login failed/);
  assert.equal(await p.locator('.rs-solid-connect').isEnabled(),true);
  await p.evaluate(()=>window.failLogin=false); await p.locator('.rs-solid-connect').click();
  assert.deepEqual((await p.evaluate(()=>calls)).filter(x=>['dropbox','googledrive','rs','solid'].includes(x[0])),[['dropbox'],['googledrive'],['rs','alice@example.test'],['solid']]);
@@ -65,7 +65,7 @@ test('single pod auto-select, no pods recovery, reconnect and destroy', async t 
  assert.deepEqual(await p.evaluate(()=>calls[0]),['pod','https://one.test/']);
  await p.evaluate(()=>rs.emit('error',{name:'Unauthorized',message:'Please reconnect'}));
  await p.locator('.rs-reconnect').click();
- await p.evaluate(()=>{pods=[];rs.emit('pod-not-selected');});
+ await p.evaluate(()=>{rs.connected=false;pods=[];rs.emit('pod-not-selected');});
  assert.match(await p.locator('.rs-box-error').innerText(),/no pods/);
  await p.locator('.rs-box-error .rs-disconnect').click();
  await p.evaluate(()=>{widget.destroy();rs.emit('connected');});
@@ -78,4 +78,36 @@ test('three named providers and optional Solid configuration', async t => {
  await p.getByRole('button',{name:'Provider 3'}).click();
  assert.deepEqual(await p.evaluate(()=>calls),[['issuer','https://provider3.test'],['solid']]);
  const q=await open(t,{});assert.equal(await q.locator('.rs-choose-solid').isVisible(),false);
+});
+
+test('remount after route replacement and destroy does not duplicate handlers', async t => {
+ const p = await open(t);
+ await p.evaluate(() => { document.querySelector('#widget').replaceChildren(); widget.attach('widget'); });
+ await p.locator('.rs-choose-dropbox').click();
+ await p.evaluate(() => { widget.destroy(); widget.attach('widget'); });
+ await p.locator('.rs-choose-googledrive').click();
+ assert.deepEqual(await p.evaluate(() => calls), [['dropbox'], ['googledrive']]);
+ assert.equal(await p.locator('.rs-widget').count(), 1);
+});
+test('late attachment recovers discovered pods without waiting for another event', async t => {
+ const p = await open(t);
+ await p.evaluate(() => {
+   widget.destroy(); rs.backend='solid'; pods=['https://one.test/', 'https://two.test/'];
+   widget.attach('widget');
+ });
+ assert.equal(await p.locator('.rs-choose-pod:visible').count(), 2);
+ await p.getByRole('button', {name:'https://two.test/',exact:true}).click();
+ await p.evaluate(() => rs.emit('features-loaded'));
+ assert.deepEqual(await p.evaluate(() => calls), [['pod','https://two.test/']]);
+});
+test('preset-only provider failure leaves arbitrary issuer input hidden', async t => {
+ const p = await open(t, {solidProviders:{providers:[{name:'Example',authURL:'https://example.test'}]}});
+ await p.evaluate(() => window.failLogin=true);
+ await p.locator('.rs-choose-solid').click();
+ await p.getByRole('button', {name:'Example',exact:true}).click();
+ assert.equal(await p.locator('.rs-box-solid [role=alert]').innerText(), 'Login failed');
+ assert.equal(await p.locator('[name=rs-provider-address]').isVisible(), false);
+ await p.evaluate(() => window.failLogin=false);
+ await p.getByRole('button', {name:'Example',exact:true}).click();
+ assert.equal(await p.locator('.rs-box-solid [role=alert]').isVisible(), false);
 });

@@ -63,8 +63,8 @@ class Widget {
         this.setState(this.state);
         break;
       case 'pod-not-selected':
-        const podURLs = this.rs.solid.getPodURLs();
-        if (podURLs === null) break;
+        const podURLs = this.rs.solid?.getPodURLs();
+        if (!podURLs || this.rs.connected || this.selectingPod) break;
         this.open();
 
         if (podURLs.length === 0) {
@@ -104,6 +104,7 @@ class Widget {
         this.setInitialState();
         break;
       case 'connected':
+        this.enableSolidConnectButton();
         this.active = true;
         this.online = true;
         if (this.rs.hasFeature('Sync')) {
@@ -303,12 +304,14 @@ class Widget {
     this.subscriptions = [];
     document.removeEventListener('click', this.outsideClick);
     this.domElement?.remove();
+    this.domElement = null;
   }
 
   setupHandlers () {
     // Older builds without Solid do not declare this event.
     if (this.solidEnabled) {
       this.listen('pod-not-selected', () => this.eventHandler('pod-not-selected'));
+      this.listen('features-loaded', () => this.restorePodSelection());
     }
     this.listen('connected', () => this.eventHandler('connected'));
     this.listen('ready', () => this.eventHandler('ready'));
@@ -336,7 +339,9 @@ class Widget {
    * @throws {Error} If the element is not found or is of an unknown type.
    */
   attach (element) {
-    if (this.domElement) return;
+    if (this.domElement?.isConnected) return;
+    this.destroy();
+    this.destroyed = false;
     const domElement = this.domElement = this.createHtmlTemplate(element);
 
     this.parentContainerEl;
@@ -356,9 +361,17 @@ class Widget {
     this.parentContainerEl.appendChild(domElement);
 
     this.setupElements();
-    this.setupHandlers();
     this.setInitialState();
     this.setModalClass();
+    this.setupHandlers();
+    this.restorePodSelection();
+  }
+
+  restorePodSelection () {
+    if (this.solidEnabled && this.rs.backend === 'solid' && !this.rs.connected &&
+        this.rs.solid?.getPodURLs() !== null && !this.rs.solid?.getPodURL?.()) {
+      this.eventHandler('pod-not-selected');
+    }
   }
 
   setEventListeners () {
@@ -395,14 +408,22 @@ class Widget {
   }
 
   async selectPod (url) {
+    if (this.selectingPod) return;
+    this.selectingPod = true;
     try {
       await this.rs.solid.setPodURL(url);
     } catch (error) {
       this.handleSolidError(error);
+    } finally {
+      this.selectingPod = false;
     }
   }
 
   async connectSolid (url) {
+    const message = this.rsSolid.querySelector('.rs-sign-in-error');
+    message.textContent = '';
+    message.classList.remove('rs-visible');
+    message.classList.add('rs-hidden');
     this.disableSolidConnectButton();
     this.solidConnecting = true;
     try {
@@ -425,12 +446,11 @@ class Widget {
     this.enableSolidConnectButton();
     this.open();
     this.setState('solid');
-    const message = this.rsSolidForm.querySelector('.rs-sign-in-error');
+    const message = this.rsSolid.querySelector('.rs-sign-in-error');
     message.textContent = error.message || String(error);
     message.classList.remove('rs-hidden');
     message.classList.add('rs-visible');
-    // Errors also need to remain visible for configurations with only preset providers.
-    this.rsSolidForm.hidden = false;
+
   }
 
   /**

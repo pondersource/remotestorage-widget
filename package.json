@@ -1,6 +1,6 @@
 {
   "name": "remotestorage-widget",
-  "version": "1.8.2-pondersource.1",
+  "version": "1.8.1",
   "description": "remoteStorage.js connect widget",
   "main": "build/widget.js",
   "scripts": {
@@ -11,7 +11,8 @@
     "dev": "webpack serve",
     "open": "opener http://localhost:8008",
     "version": "npm run build && git add build/",
-    "test": "node --test test/*.test.cjs"
+    "test": "node --test test/*.test.cjs",
+    "test:solid": "node --test test/solid-integration.cjs"
   },
   "repository": {
     "type": "git",

@@ -70,10 +70,29 @@ Build, run and watch demo/test app:
 
 The demo app will then be served at http://localhost:8008
 
-## PonderSource Solid integration
+## Solid integration
 
-This build continues [Yashar PourMohammad's Solid support PR #136](https://github.com/remotestorage/remotestorage-widget/pull/136) on current upstream widget code. Enable it with `solidProviders: { allowAnyProvider: true }` and an rs.js build that includes the Solid backend and `pod-not-selected` event.
+Enable Solid with `solidProviders: { allowAnyProvider: true }` and an rs.js build
+that includes its Solid backend and the `pod-not-selected` event. Alternatively,
+provide named issuers with `solidProviders.providers` and omit `allowAnyProvider`
+to hide the free-form issuer field.
 
-The widget handles provider login, automatic single-pod selection, multiple-pod selection, no-pod errors, authorization renewal and disconnect. Provider and pod names are rendered as text. Call `destroy()` when removing an attached widget to release its event listeners.
+The widget handles provider login, single-pod selection, a choice of multiple
+pods, no-pod errors, authorization renewal and disconnect. Provider and pod names
+are rendered as text. Call `destroy()` when removing a widget to release its
+listeners; `attach()` can attach it again after a route replaces its container.
 
-Run `npm ci && npm run build && npm test`. Set `CHROMIUM_PATH` to a local Chromium executable if needed. The PonderSource launcher additionally tests real Solid OAuth and cross-device private storage against Community Solid Server.
+## Tests
+
+Run `npm ci`, `npx playwright install chromium`, `npm run build`, and `npm test`.
+Set `CHROMIUM_PATH` to use an existing Chromium installation.
+
+`npm run test:solid` additionally tests real OAuth, private module storage,
+reload, a fresh browser context, deletion and disconnect against Community Solid
+Server. Set `RS_SOLID_SOURCE` to a checkout of rs.js commit
+`c0f41cb89aba7e45524897e7d7fde190f6d57144`, run `npm ci && npm run build:js && npm run build:solid` in that
+checkout, then `npm ci` in its `examples/solid` directory. Start
+`node tests/server.cjs` there with `RS_SOLID_TEST_PASSWORD` set to a disposable
+password. Run the widget's `npm run test:solid` with the same environment.
+The server uses a disposable test account and in-memory pod. Both suites run in
+`.github/workflows/test.yml`; no personal storage credentials are required.
