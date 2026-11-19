@@ -18,6 +18,7 @@ import circleOpenSvg from './assets/circle-open.svg';
 class Widget {
   constructor (remoteStorage, options={}) {
     this.rs = remoteStorage;
+    this.lwsOpenID = options.lwsOpenID;
 
     this.solidProviders = options.solidProviders ? options.solidProviders : {};
     this.leaveOpen      = options.leaveOpen ? options.leaveOpen : false;
@@ -234,6 +235,7 @@ class Widget {
     this.rsLWSError = this.rsLWSForm.querySelector('.rs-lws-error');
     this.rsChooseLWSButton = document.querySelector('button.rs-choose-lws');
     if (!this.rs.lws) this.rsChooseLWSButton.remove();
+    else if (this.lwsOpenID) this.rs.lws.configureOpenID(this.lwsOpenID);
 
     this.rsConnectedLabel = document.querySelector('.rs-box-connected .rs-sub-headline');
     this.rsChooseRemoteStorageButton = document.querySelector('button.rs-choose-rs');
@@ -349,6 +351,12 @@ class Widget {
     this.setupHandlers();
     this.setInitialState();
     this.setModalClass();
+    if (this.rs.lws && this.lwsOpenID) {
+      this.rs.lws.handleIncomingRedirect().catch(error => {
+        this.setState('lws');
+        this.rsLWSError.textContent = error.message || 'Could not finish LWS sign-in.';
+      });
+    }
   }
 
   setEventListeners () {
