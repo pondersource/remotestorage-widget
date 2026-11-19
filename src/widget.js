@@ -361,6 +361,7 @@ class Widget {
         this.rs.lws.setStorageURL(this.rsLWSAddress.value.trim());
         await this.rs.lws.connect();
       } catch (error) {
+        if (error.redirecting) return;
         this.rsLWSError.textContent = error.message || 'Could not connect to LWS storage.';
       } finally {
         this.rsLWSConnect.disabled = false;
