@@ -228,6 +228,12 @@ class Widget {
     this.rsConnected = document.querySelector('.rs-box-connected');
     this.rsSignIn = document.querySelector('.rs-box-sign-in');
     this.rsSolid = document.querySelector('.rs-box-solid');
+    this.rsLWSForm = document.querySelector('.rs-lws-form');
+    this.rsLWSAddress = this.rsLWSForm.querySelector('input[name=rs-lws-address]');
+    this.rsLWSConnect = this.rsLWSForm.querySelector('button[type=submit]');
+    this.rsLWSError = this.rsLWSForm.querySelector('.rs-lws-error');
+    this.rsChooseLWSButton = document.querySelector('button.rs-choose-lws');
+    if (!this.rs.lws) this.rsChooseLWSButton.remove();
 
     this.rsConnectedLabel = document.querySelector('.rs-box-connected .rs-sub-headline');
     this.rsChooseRemoteStorageButton = document.querySelector('button.rs-choose-rs');
@@ -346,6 +352,22 @@ class Widget {
   }
 
   setEventListeners () {
+    this.rsLWSForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      this.rsLWSError.textContent = '';
+      this.rsLWSConnect.disabled = true;
+      this.rsLWSConnect.textContent = 'Connecting…';
+      try {
+        this.rs.lws.setStorageURL(this.rsLWSAddress.value.trim());
+        await this.rs.lws.connect();
+      } catch (error) {
+        this.rsLWSError.textContent = error.message || 'Could not connect to LWS storage.';
+      } finally {
+        this.rsLWSConnect.disabled = false;
+        this.rsLWSConnect.textContent = 'Connect';
+      }
+    });
+    this.rsLWSForm.querySelector('.rs-lws-back').addEventListener('click', () => this.setState('choose'));
     this.rsSignInForm.addEventListener('submit', (e) => {
       e.preventDefault();
       let userAddress = document.querySelector('input[name=rs-user-address]').value;
@@ -403,7 +425,7 @@ class Widget {
       this.rsBackdrop.classList.add('visible');
     }
     // choose backend only if some providers are declared
-    if ((this.rs.apiKeys && Object.keys(this.rs.apiKeys).length > 0) ||
+    if (this.rs.lws || (this.rs.apiKeys && Object.keys(this.rs.apiKeys).length > 0) ||
     (this.solidProviders && Object.keys(this.solidProviders).length > 0)) {
       this.setState('choose');
     } else {
@@ -412,6 +434,11 @@ class Widget {
   }
 
   setClickHandlers () {
+    if (this.rs.lws) this.rsChooseLWSButton.addEventListener('click', () => {
+      this.setState('lws');
+      this.rsLWSAddress.value = this.rs.lws.storageURL || '';
+      this.rsLWSAddress.focus();
+    });
     // Initial button
     this.rsInitial.addEventListener('click', () => this.showChooseOrSignIn() );
 
@@ -611,6 +638,7 @@ class Widget {
     this.rsWidget.classList.remove('rs-backend-dropbox');
     this.rsWidget.classList.remove('rs-backend-googledrive');
     this.rsWidget.classList.remove('rs-backend-solid');
+    this.rsWidget.classList.remove('rs-backend-lws');
 
     if (backend) {
       this.rsWidget.classList.add(`rs-backend-${backend}`);
@@ -682,3 +710,4 @@ Widget.INRUPT = {
 };
 
 export default Widget;
+
