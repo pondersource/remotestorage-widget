@@ -34,6 +34,7 @@ The widget has some configuration options to customize the behavior:
 | `skipInitial` | Don't show the initial connect hint, but show sign-in screen directly instead | Boolean | `false` |
 | `logging` | Enable logging for debugging purposes | Boolean | `false` |
 | `modalBackdrop` | Show a dark, transparent backdrop when opening the widget for connecting an account. `true` shows backdrop everywhere, `false` turns it off everywhere. Default is to only show it on small screens. | Boolean, String | `"onlySmallScreens"` |
+| `solidProviders` | Enables the Solid option. You can either provide a list of auth URLs under the `providers` key with `name` and `authURL` keys or set `allowAnyProvider` to `true` in order to allow the user to type in any identity provider URL. `Widget.SOLID_COMMUNITY` and `Widget.INRUPT` are predefined for convenience. | Object | undefined |
 
 Example:
 
@@ -68,3 +69,11 @@ Build, run and watch demo/test app:
     npm start
 
 The demo app will then be served at http://localhost:8008
+
+## PonderSource Solid integration
+
+This build continues [Yashar PourMohammad's Solid support PR #136](https://github.com/remotestorage/remotestorage-widget/pull/136) on current upstream widget code. Enable it with `solidProviders: { allowAnyProvider: true }` and an rs.js build that includes the Solid backend and `pod-not-selected` event.
+
+The widget handles provider login, automatic single-pod selection, multiple-pod selection, no-pod errors, authorization renewal and disconnect. Provider and pod names are rendered as text. Call `destroy()` when removing an attached widget to release its event listeners.
+
+Run `npm ci && npm run build && npm test`. Set `CHROMIUM_PATH` to a local Chromium executable if needed. The PonderSource launcher additionally tests real Solid OAuth and cross-device private storage against Community Solid Server.

@@ -8,6 +8,7 @@ import circleOpenSvg from './assets/circle-open.svg';
  *
  * @param {object}  remoteStorage          - remoteStorage instance
  * @param {object}  options                - Widget options
+ * @param {object}  options.solidProviders - Specify valid Solid providers for the Solid backend
  * @param {boolean} options.leaveOpen      - Do not minimize widget when user clicks outside of it (default: false)
  * @param {number}  options.autoCloseAfter - Time after which the widget closes  automatically in ms (default: 1500)
  * @param {boolean} options.skipInitial    - Don't show the initial connect hint, but show sign-in screen directly instead (default: false)
@@ -18,11 +19,13 @@ class Widget {
   constructor (remoteStorage, options={}) {
     this.rs = remoteStorage;
 
+    this.solidProviders = options.solidProviders || {};
     this.leaveOpen         = options.leaveOpen ? options.leaveOpen : false;
     this.autoCloseAfter    = options.autoCloseAfter ? options.autoCloseAfter : 1500;
     this.skipInitial       = options.skipInitial ? options.skipInitial : false;
     this.logging           = options.logging ? options.logging : false;
     this.parentContainerEl = null;
+    this.subscriptions = [];
 
     if (options.hasOwnProperty('modalBackdrop')) {
       if (typeof options.modalBackdrop !== 'boolean' && options.modalBackdrop !== 'onlySmallScreens') {
@@ -59,6 +62,22 @@ class Widget {
       case 'ready':
         this.setState(this.state);
         break;
+      case 'pod-not-selected':
+        const podURLs = this.rs.solid.getPodURLs();
+        if (podURLs === null) break;
+        this.open();
+
+        if (podURLs.length === 0) {
+          this.handleNoPod();
+        }
+        else if (podURLs.length === 1) {
+          this.selectPod(podURLs[0]);
+        }
+        else {
+          this.populatePodOptions();
+          this.setState('choose-pod');
+        }
+        break;
       case 'sync-started':
         this.handleSyncStarted();
         break;
@@ -76,6 +95,8 @@ class Widget {
         }
         break;
       case 'disconnected':
+        this.enableConnectButton();
+        this.enableSolidConnectButton();
         this.active = false;
         this.setOnline();
         this.setBackendClass(); // removes all backend CSS classes
@@ -87,14 +108,13 @@ class Widget {
         this.online = true;
         if (this.rs.hasFeature('Sync')) {
           this.shouldCloseWhenSyncDone = true;
-          this.rs.on('sync-req-done', msg => this.eventHandler('sync-req-done', msg));
-          this.rs.on('sync-done', msg => this.eventHandler('sync-done', msg));
+
         } else {
           this.rsSyncButton.classList.add('rs-hidden');
           setTimeout(this.close.bind(this), this.autoCloseAfter);
         }
         let connectedUser = this.rs.remote.userAddress;
-        this.rsConnectedUser.innerHTML = connectedUser;
+        this.rsConnectedUser.textContent = connectedUser;
         this.setBackendClass(this.rs.backend);
         this.rsConnectedLabel.textContent = 'Connected';
         this.setState('connected');
@@ -107,6 +127,10 @@ class Widget {
         break;
       case 'error':
         this.setBackendClass(this.rs.backend);
+        if (this.solidConnecting || (this.rs.backend === 'solid' && !this.rs.connected && msg?.name !== 'Unauthorized')) {
+          this.handleSolidError(msg);
+          break;
+        }
 
         if (msg?.name === 'DiscoveryError') {
           this.handleDiscoveryError(msg);
@@ -215,16 +239,36 @@ class Widget {
     this.rsChooseDropboxButton = this.parentContainerEl.querySelector('button.rs-choose-dropbox');
     this.rsChooseGoogleDriveButton = this.parentContainerEl.querySelector('button.rs-choose-googledrive');
     this.rsErrorBox = this.parentContainerEl.querySelector('.rs-box-error .rs-error-message');
+    this.rsSolid = this.parentContainerEl.querySelector('.rs-box-solid');
+    this.rsChooseSolidButton = this.parentContainerEl.querySelector('button.rs-choose-solid');
+    this.rsSolidOptions = [this.parentContainerEl.querySelector('button.rs-option-solid')];
+    this.rsSolidPodOptions = [this.parentContainerEl.querySelector('button.rs-choose-pod')];
+    this.rsSolidForm = this.parentContainerEl.querySelector('.rs-solid-form');
+    this.rsProviderInput = this.rsSolidForm.querySelector('input[name=rs-provider-address]');
+    this.rsSolidConnectButton = this.parentContainerEl.querySelector('.rs-solid-connect');
 
     // check if apiKeys is set for Dropbox or Google [googledrive, dropbox]
     // to show/hide relative buttons only if needed
-    if (! this.rs.apiKeys.hasOwnProperty('googledrive')) {
+    if (! (this.rs.apiKeys || {}).hasOwnProperty('googledrive')) {
       this.rsChooseGoogleDriveButton.parentNode.removeChild(this.rsChooseGoogleDriveButton);
     }
 
-    if (! this.rs.apiKeys.hasOwnProperty('dropbox')) {
+    if (! (this.rs.apiKeys || {}).hasOwnProperty('dropbox')) {
       this.rsChooseDropboxButton.parentNode.removeChild(this.rsChooseDropboxButton);
     }
+
+    const providers = this.solidProviders.providers || [];
+    const template = this.rsSolidOptions[0];
+    this.rsSolidOptions = providers.map(provider => {
+      const button = template.cloneNode(true);
+      button.lastElementChild.textContent = provider.name;
+      template.before(button);
+      return button;
+    });
+    template.remove();
+    this.solidEnabled = providers.length > 0 || this.solidProviders.allowAnyProvider === true;
+    this.rsChooseSolidButton.hidden = !this.solidEnabled;
+    this.rsSolidForm.hidden = !this.solidProviders.allowAnyProvider;
 
     this.rsSignInForm = this.parentContainerEl.querySelector('.rs-sign-in-form');
     this.rsAddressInput = this.rsSignInForm.querySelector('input[name=rs-user-address]');
@@ -245,14 +289,37 @@ class Widget {
    *
    * @private
    */
-  setupHandlers () {
-    this.rs.on('connected', () => this.eventHandler('connected'));
-    this.rs.on('ready', () => this.eventHandler('ready'));
-    this.rs.on('disconnected', () => this.eventHandler('disconnected'));
-    this.rs.on('network-online', () => this.eventHandler('network-online'));
-    this.rs.on('network-offline', () => this.eventHandler('network-offline'));
-    this.rs.on('error', (error) => this.eventHandler('error', error));
+  listen (name, handler) {
+    const guarded = (...args) => { if (!this.destroyed) handler(...args); };
+    this.rs.on(name, guarded);
+    this.subscriptions.push([name, guarded]);
+  }
 
+  destroy () {
+    this.destroyed = true;
+    for (const [name, handler] of this.subscriptions) {
+      this.rs.removeEventListener(name, handler);
+    }
+    this.subscriptions = [];
+    document.removeEventListener('click', this.outsideClick);
+    this.domElement?.remove();
+  }
+
+  setupHandlers () {
+    // Older builds without Solid do not declare this event.
+    if (this.solidEnabled) {
+      this.listen('pod-not-selected', () => this.eventHandler('pod-not-selected'));
+    }
+    this.listen('connected', () => this.eventHandler('connected'));
+    this.listen('ready', () => this.eventHandler('ready'));
+    this.listen('disconnected', () => this.eventHandler('disconnected'));
+    this.listen('network-online', () => this.eventHandler('network-online'));
+    this.listen('network-offline', () => this.eventHandler('network-offline'));
+    this.listen('error', (error) => this.eventHandler('error', error));
+
+    this.listen('sync-started', msg => this.eventHandler('sync-started', msg));
+    this.listen('sync-req-done', msg => this.eventHandler('sync-req-done', msg));
+    this.listen('sync-done', msg => this.eventHandler('sync-done', msg));
     this.setEventListeners();
     this.setClickHandlers();
   }
@@ -269,7 +336,8 @@ class Widget {
    * @throws {Error} If the element is not found or is of an unknown type.
    */
   attach (element) {
-    const domElement = this.createHtmlTemplate(element);
+    if (this.domElement) return;
+    const domElement = this.domElement = this.createHtmlTemplate(element);
 
     this.parentContainerEl;
 
@@ -300,6 +368,69 @@ class Widget {
       this.disableConnectButton();
       this.rs.connect(userAddress);
     });
+
+    this.rsSolidForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.connectSolid(this.rsProviderInput.value.trim());
+    });
+  }
+
+  /**
+   * Read solid pod URLs from the remote storage instance and fill the pod options.
+   *
+   * @private
+   */
+  populatePodOptions () {
+    const podURLs = this.rs.solid.getPodURLs() || [];
+    const template = this.rsSolidPodOptions[0];
+    const parent = template.parentElement;
+    parent.replaceChildren();
+    this.rsSolidPodOptions = podURLs.map(url => {
+      const button = template.cloneNode(true);
+      button.lastElementChild.textContent = url;
+      button.addEventListener('click', () => this.selectPod(url));
+      parent.appendChild(button);
+      return button;
+    });
+  }
+
+  async selectPod (url) {
+    try {
+      await this.rs.solid.setPodURL(url);
+    } catch (error) {
+      this.handleSolidError(error);
+    }
+  }
+
+  async connectSolid (url) {
+    this.disableSolidConnectButton();
+    this.solidConnecting = true;
+    try {
+      if (!this.rs.solid) throw new Error('Solid storage is not available yet. Please try again.');
+      this.rs.solid.setAuthURL(url);
+      await this.rs.solid.connect();
+    } catch (error) {
+      this.handleSolidError(error);
+    }
+  }
+
+  enableSolidConnectButton () {
+    this.solidConnecting = false;
+    this.rsSolidConnectButton.disabled = false;
+    this.rsSolidConnectButton.textContent = 'Connect';
+    this.rsSolidConnectButton.classList.remove('rs-connecting');
+  }
+
+  handleSolidError (error) {
+    this.enableSolidConnectButton();
+    this.open();
+    this.setState('solid');
+    const message = this.rsSolidForm.querySelector('.rs-sign-in-error');
+    message.textContent = error.message || String(error);
+    message.classList.remove('rs-hidden');
+    message.classList.add('rs-visible');
+    // Errors also need to remain visible for configurations with only preset providers.
+    this.rsSolidForm.hidden = false;
   }
 
   /**
@@ -315,7 +446,8 @@ class Widget {
       this.rsBackdrop.classList.add('visible');
     }
     // choose backend only if some providers are declared
-    if (this.rs.apiKeys && Object.keys(this.rs.apiKeys).length > 0) {
+    if ((this.rs.apiKeys && Object.keys(this.rs.apiKeys).length > 0) ||
+    this.solidEnabled) {
       this.setState('choose');
     } else {
       this.setState('sign-in');
@@ -338,6 +470,18 @@ class Widget {
     // Choose Google Drive button
     this.rsChooseGoogleDriveButton.addEventListener('click', () => this.rs["googledrive"].connect() );
 
+    // Choose Solid button
+    this.rsChooseSolidButton.addEventListener('click', () => {
+      this.setState('solid');
+      if (this.solidProviders.allowAnyProvider) this.rsProviderInput.focus();
+    });
+
+    for (let i = 0; i < this.rsSolidOptions.length; i++) {
+      this.rsSolidOptions[i].addEventListener('click', () => {
+        this.connectSolid(this.solidProviders.providers[i].authURL);
+      });
+    }
+
     // Disconnect button
     this.rsDisconnectButton.addEventListener('click', () => this.rs.disconnect() );
 
@@ -359,7 +503,8 @@ class Widget {
     }
 
     // Reduce to icon only if connected and clicked outside of widget
-    document.addEventListener('click', () => this.close() );
+    this.outsideClick = () => this.close();
+    document.addEventListener('click', this.outsideClick);
 
     // Clicks on the widget stop the above event
     this.rsWidget.addEventListener('click', e => e.stopPropagation() );
@@ -407,6 +552,7 @@ class Widget {
    * the widget will not close.
    */
   close () {
+    if (this.destroyed) return;
     // don't do anything when we have an error
     if (this.state === 'error') { return; }
 
@@ -441,6 +587,18 @@ class Widget {
     this.rsConnectButton.classList.add('rs-connecting');
     const circleSpinner = circleOpenSvg;
     this.rsConnectButton.innerHTML = `Connecting ${circleSpinner}`;
+  }
+
+  /**
+   * Disable the Solid connect button and indicate connect activity
+   *
+   * @private
+   */
+  disableSolidConnectButton () {
+    this.rsSolidConnectButton.disabled = true;
+    this.rsSolidConnectButton.classList.add('rs-connecting');
+    const circleSpinner = circleOpenSvg;
+    this.rsSolidConnectButton.innerHTML = `Connecting ${circleSpinner}`;
   }
 
   /**
@@ -496,6 +654,7 @@ class Widget {
     this.rsWidget.classList.remove('rs-backend-remotestorage');
     this.rsWidget.classList.remove('rs-backend-dropbox');
     this.rsWidget.classList.remove('rs-backend-googledrive');
+    this.rsWidget.classList.remove('rs-backend-solid');
 
     if (backend) {
       this.rsWidget.classList.add(`rs-backend-${backend}`);
@@ -503,7 +662,7 @@ class Widget {
   }
 
   showErrorBox (errorMsg) {
-    this.rsErrorBox.innerHTML = errorMsg;
+    this.rsErrorBox.textContent = errorMsg;
     this.setState('error');
   }
 
@@ -523,7 +682,7 @@ class Widget {
 
   handleDiscoveryError (error) {
     let msgContainer = this.parentContainerEl.querySelector('.rs-sign-in-error');
-    msgContainer.innerHTML = error.message;
+    msgContainer.textContent = error.message;
     msgContainer.classList.remove('rs-hidden');
     msgContainer.classList.add('rs-visible');
     this.enableConnectButton();
@@ -544,6 +703,13 @@ class Widget {
     }
   }
 
+  handleNoPod () {
+    this.open();
+    this.showErrorBox('This account has no pods.');
+    this.rsErrorBox.appendChild(this.rsErrorDisconnectButton);
+    this.rsErrorDisconnectButton.classList.remove('rs-hidden');
+  }
+
   updateLastSyncedStatus () {
     const now = new Date();
     if (this.online) {
@@ -560,5 +726,15 @@ class Widget {
     return window.innerWidth < 421;
   }
 }
+
+Widget.SOLID_COMMUNITY = {
+  name: 'Solid Community',
+  authURL: 'https://solidcommunity.net'
+};
+
+Widget.INRUPT = {
+  name: 'Inrupt',
+  authURL: 'https://login.inrupt.com'
+};
 
 export default Widget;
