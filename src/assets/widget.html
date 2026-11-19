@@ -19,6 +19,7 @@
 <div class="rs-widget rs-state-initial">
 
   <div class="rs-widget-icon">
+    <span class="rs-main-logo rs-lws-mark" aria-label="LWS storage">LWS</span>
     <svg class="rs-main-logo" id="rs-main-logo-remotestorage" xmlns="http://www.w3.org/2000/svg" version="1.1"
          xml:space="preserve" width="0.739008in" height="0.853339in"
          style="shape-rendering:geometricPrecision; text-rendering:geometricPrecision; image-rendering:optimizeQuality; fill-rule:evenodd; clip-rule:evenodd"
@@ -478,6 +479,7 @@
           </svg>
           <div>Google Drive</div>
         </button>
+        <button class="rs-button rs-button-big rs-choose-lws" type="button"><div>LWS</div></button>
         <button class="rs-button rs-button-big rs-choose-solid">
           <svg class="solid-logo" width="40" height="40"
                xml:space="preserve" viewBox="0 0 352 322" xmlns="http://www.w3.org/2000/svg">
@@ -553,6 +555,19 @@
         <input id="solid-id-provider" type="text" name="rs-provider-address" placeholder="login.provider.com" autocapitalize="off">
         <div class="rs-sign-in-error rs-hidden"></div>
         <button type="submit" class="rs-solid-connect">Connect</button>
+      </form>
+    </div>
+  </div>
+  <div class="rs-box rs-box-lws" aria-hidden="true">
+    <div class="rs-content">
+      <form class="rs-lws-form">
+        <h1 class="rs-big-headline">Connect your LWS storage</h1>
+        <label for="rs-lws-address">Storage address</label>
+        <input id="rs-lws-address" name="rs-lws-address" type="url" required placeholder="https://storage.example/alice/" autocomplete="url" aria-describedby="rs-lws-help">
+        <p class="rs-short-desc" id="rs-lws-help">Enter your pod address, or the address of a file or folder inside it.</p>
+        <div class="rs-lws-error" role="alert"></div>
+        <button type="submit" class="rs-connect">Connect</button>
+        <button type="button" class="rs-button rs-lws-back">Other storage</button>
       </form>
     </div>
   </div>
