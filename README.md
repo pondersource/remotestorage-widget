@@ -69,3 +69,11 @@ Build, run and watch demo/test app:
     npm start
 
 The demo app will then be served at http://localhost:8008
+
+## PonderSource Solid integration
+
+This build continues [Yashar PourMohammad's Solid support PR #136](https://github.com/remotestorage/remotestorage-widget/pull/136) on current upstream widget code. Enable it with `solidProviders: { allowAnyProvider: true }` and an rs.js build that includes the Solid backend and `pod-not-selected` event.
+
+The widget handles provider login, automatic single-pod selection, multiple-pod selection, no-pod errors, authorization renewal and disconnect. Provider and pod names are rendered as text. Call `destroy()` when removing an attached widget to release its event listeners.
+
+Run `npm ci && npm run build && npm test`. Set `CHROMIUM_PATH` to a local Chromium executable if needed. The PonderSource launcher additionally tests real Solid OAuth and cross-device private storage against Community Solid Server.

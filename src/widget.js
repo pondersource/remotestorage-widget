@@ -19,11 +19,13 @@ class Widget {
   constructor (remoteStorage, options={}) {
     this.rs = remoteStorage;
 
-    this.solidProviders = options.solidProviders ? options.solidProviders : {};
-    this.leaveOpen      = options.leaveOpen ? options.leaveOpen : false;
-    this.autoCloseAfter = options.autoCloseAfter ? options.autoCloseAfter : 1500;
-    this.skipInitial    = options.skipInitial ? options.skipInitial : false;
-    this.logging        = options.logging ? options.logging : false;
+    this.solidProviders = options.solidProviders || {};
+    this.leaveOpen         = options.leaveOpen ? options.leaveOpen : false;
+    this.autoCloseAfter    = options.autoCloseAfter ? options.autoCloseAfter : 1500;
+    this.skipInitial       = options.skipInitial ? options.skipInitial : false;
+    this.logging           = options.logging ? options.logging : false;
+    this.parentContainerEl = null;
+    this.subscriptions = [];
 
     if (options.hasOwnProperty('modalBackdrop')) {
       if (typeof options.modalBackdrop !== 'boolean' && options.modalBackdrop !== 'onlySmallScreens') {
@@ -61,44 +63,40 @@ class Widget {
         this.setState(this.state);
         break;
       case 'pod-not-selected':
-        let podURLs = this.rs.solid.getPodURLs();
+        const podURLs = this.rs.solid.getPodURLs();
+        if (podURLs === null) break;
+        this.open();
 
         if (podURLs.length === 0) {
           this.handleNoPod();
         }
         else if (podURLs.length === 1) {
-          this.rs.solid.setPodURL(podURLs[0]);
+          this.selectPod(podURLs[0]);
         }
         else {
           this.populatePodOptions();
           this.setState('choose-pod');
         }
         break;
+      case 'sync-started':
+        this.handleSyncStarted();
+        break;
+      // For backward compatibility with rs.js <= 2.0.0-beta.6
       case 'sync-req-done':
-        this.syncInProgress = true;
-        this.rsSyncButton.classList.add("rs-rotate");
-        setTimeout(() => {
-          if (!this.syncInProgress) return;
-          this.rsConnectedLabel.textContent = 'Synchronizing';
-        }, 1000);
+        this.handleSyncStarted();
         break;
       case 'sync-done':
+        if (this.online && !msg?.completed) return;
         this.syncInProgress = false;
         this.rsSyncButton.classList.remove("rs-rotate");
-
-        if (this.rsWidget.classList.contains('rs-state-unauthorized') ||
-            !this.rs.remote.online) {
-          this.updateLastSyncedOutput();
-        } else if (this.rs.remote.online) {
-          this.lastSynced = new Date();
-          this.rsConnectedLabel.textContent = 'Synced just now';
-        }
-
+        this.updateLastSyncedStatus();
         if (!this.closed && this.shouldCloseWhenSyncDone) {
           setTimeout(this.close.bind(this), this.autoCloseAfter);
         }
         break;
       case 'disconnected':
+        this.enableConnectButton();
+        this.enableSolidConnectButton();
         this.active = false;
         this.setOnline();
         this.setBackendClass(); // removes all backend CSS classes
@@ -110,14 +108,13 @@ class Widget {
         this.online = true;
         if (this.rs.hasFeature('Sync')) {
           this.shouldCloseWhenSyncDone = true;
-          this.rs.on('sync-req-done', () => this.eventHandler('sync-req-done'));
-          this.rs.on('sync-done', () => this.eventHandler('sync-done'));
+
         } else {
           this.rsSyncButton.classList.add('rs-hidden');
           setTimeout(this.close.bind(this), this.autoCloseAfter);
         }
         let connectedUser = this.rs.remote.userAddress;
-        this.rsConnectedUser.innerHTML = connectedUser;
+        this.rsConnectedUser.textContent = connectedUser;
         this.setBackendClass(this.rs.backend);
         this.rsConnectedLabel.textContent = 'Connected';
         this.setState('connected');
@@ -130,15 +127,19 @@ class Widget {
         break;
       case 'error':
         this.setBackendClass(this.rs.backend);
+        if (this.solidConnecting || (this.rs.backend === 'solid' && !this.rs.connected && msg?.name !== 'Unauthorized')) {
+          this.handleSolidError(msg);
+          break;
+        }
 
-        if (msg.name === 'DiscoveryError') {
+        if (msg?.name === 'DiscoveryError') {
           this.handleDiscoveryError(msg);
-        } else if (msg.name === 'SyncError') {
+        } else if (msg?.name === 'SyncError') {
           this.handleSyncError(msg);
-        } else if (msg.name === 'Unauthorized') {
+        } else if (msg?.name === 'Unauthorized') {
           this.handleUnauthorized(msg);
         } else {
-          console.debug('Encountered unhandled error', msg);
+          console.debug(`Encountered unhandled error: "${msg}"`);
         }
         break;
     }
@@ -148,13 +149,13 @@ class Widget {
     if (!state) return;
     this.log('Setting state ', state);
 
-    let lastSelected = document.querySelector('.rs-box.rs-selected');
+    let lastSelected = this.parentContainerEl.querySelector('.rs-box.rs-selected');
     if (lastSelected) {
       lastSelected.classList.remove('rs-selected');
       lastSelected.setAttribute('aria-hidden', 'true');
     }
 
-    let toSelect = document.querySelector('.rs-box.rs-box-'+state);
+    let toSelect = this.parentContainerEl.querySelector('.rs-box.rs-box-'+state);
     if (toSelect) {
       toSelect.classList.add('rs-selected');
       toSelect.setAttribute('aria-hidden', 'false');
@@ -218,84 +219,69 @@ class Widget {
   /**
    * Save all interactive DOM elements as variables for later access.
    *
+   * @throws {Error} If parent container element not found
    * @private
    */
   setupElements () {
-    this.rsWidget = document.querySelector('.rs-widget');
-    this.rsBackdrop = document.querySelector('.remotestorage-widget-modal-backdrop');
-    this.rsInitial = document.querySelector('.rs-box-initial');
-    this.rsChoose = document.querySelector('.rs-box-choose');
-    this.rsConnected = document.querySelector('.rs-box-connected');
-    this.rsSignIn = document.querySelector('.rs-box-sign-in');
-    this.rsSolid = document.querySelector('.rs-box-solid');
+    if (!this.parentContainerEl) {
+      throw new Error("Parent container element not found");
+    }
 
-    this.rsConnectedLabel = document.querySelector('.rs-box-connected .rs-sub-headline');
-    this.rsChooseRemoteStorageButton = document.querySelector('button.rs-choose-rs');
-    this.rsChooseDropboxButton = document.querySelector('button.rs-choose-dropbox');
-    this.rsChooseGoogleDriveButton = document.querySelector('button.rs-choose-googledrive');
-    this.rsChooseSolidButton = document.querySelector('button.rs-choose-solid');
-    this.rsSolidOptions = [ document.querySelector('button.rs-option-solid') ];
-    this.rsSolidPodOptions = [ document.querySelector('button.rs-choose-pod') ];
-    this.rsErrorBox = document.querySelector('.rs-box-error .rs-error-message');
-    
-    this.rsSolidForm = document.querySelector('.rs-solid-form');
+    this.rsWidget = this.parentContainerEl.querySelector('.rs-widget');
+    this.rsBackdrop = this.parentContainerEl.querySelector('.remotestorage-widget-modal-backdrop');
+    this.rsInitial = this.parentContainerEl.querySelector('.rs-box-initial');
+    this.rsChoose = this.parentContainerEl.querySelector('.rs-box-choose');
+    this.rsConnected = this.parentContainerEl.querySelector('.rs-box-connected');
+    this.rsSignIn = this.parentContainerEl.querySelector('.rs-box-sign-in');
+
+    this.rsConnectedLabel = this.parentContainerEl.querySelector('.rs-box-connected .rs-sub-headline');
+    this.rsChooseRemoteStorageButton = this.parentContainerEl.querySelector('button.rs-choose-rs');
+    this.rsChooseDropboxButton = this.parentContainerEl.querySelector('button.rs-choose-dropbox');
+    this.rsChooseGoogleDriveButton = this.parentContainerEl.querySelector('button.rs-choose-googledrive');
+    this.rsErrorBox = this.parentContainerEl.querySelector('.rs-box-error .rs-error-message');
+    this.rsSolid = this.parentContainerEl.querySelector('.rs-box-solid');
+    this.rsChooseSolidButton = this.parentContainerEl.querySelector('button.rs-choose-solid');
+    this.rsSolidOptions = [this.parentContainerEl.querySelector('button.rs-option-solid')];
+    this.rsSolidPodOptions = [this.parentContainerEl.querySelector('button.rs-choose-pod')];
+    this.rsSolidForm = this.parentContainerEl.querySelector('.rs-solid-form');
     this.rsProviderInput = this.rsSolidForm.querySelector('input[name=rs-provider-address]');
-    this.rsSolidConnectButton = document.querySelector('.rs-solid-connect');
+    this.rsSolidConnectButton = this.parentContainerEl.querySelector('.rs-solid-connect');
 
     // check if apiKeys is set for Dropbox or Google [googledrive, dropbox]
     // to show/hide relative buttons only if needed
-    if (! this.rs.apiKeys.hasOwnProperty('googledrive')) {
+    if (! (this.rs.apiKeys || {}).hasOwnProperty('googledrive')) {
       this.rsChooseGoogleDriveButton.parentNode.removeChild(this.rsChooseGoogleDriveButton);
     }
 
-    if (! this.rs.apiKeys.hasOwnProperty('dropbox')) {
+    if (! (this.rs.apiKeys || {}).hasOwnProperty('dropbox')) {
       this.rsChooseDropboxButton.parentNode.removeChild(this.rsChooseDropboxButton);
     }
 
-    // check if solid provideres are configured to add, show or hide buttons
-    // only if needed
-    if (! this.solidProviders) {
-      this.rsChooseSolidButton.parentNode.removeChild(this.rsChooseSolidButton);
-    }
-    else {
-      const providers = this.solidProviders.providers ? this.solidProviders.providers : [];
+    const providers = this.solidProviders.providers || [];
+    const template = this.rsSolidOptions[0];
+    this.rsSolidOptions = providers.map(provider => {
+      const button = template.cloneNode(true);
+      button.lastElementChild.textContent = provider.name;
+      template.before(button);
+      return button;
+    });
+    template.remove();
+    this.solidEnabled = providers.length > 0 || this.solidProviders.allowAnyProvider === true;
+    this.rsChooseSolidButton.hidden = !this.solidEnabled;
+    this.rsSolidForm.hidden = !this.solidProviders.allowAnyProvider;
 
-      if (providers.length > 0 || this.solidProviders.allowAnyProvider) {
-        if (providers.length > 0) {
-          this.rsSolidOptions[0].lastElementChild.innerHTML = providers[0].name;
-
-          for (let i = 1; i < providers.length; i++) {
-            const previousButton = this.rsSolidOptions[i - 1];
-            const nextButton = previousButton.cloneNode(true);
-            nextButton.lastElementChild.innerHTML = providers[i].name;
-            previousButton.after(nextButton);
-          }
-        }
-        else {
-          this.rsSolidOptions[0].parentNode.removeChild(this.rsSolidOptions[0]);  
-        }
-    
-        if (! this.solidProviders.allowAnyProvider) {
-          this.rsSolidForm.parentNode.removeChild(this.rsSolidForm);
-        }
-      }
-      else {
-        this.rsChooseSolidButton.parentNode.removeChild(this.rsChooseSolidButton);
-      }
-    }
-
-    this.rsSignInForm = document.querySelector('.rs-sign-in-form');
+    this.rsSignInForm = this.parentContainerEl.querySelector('.rs-sign-in-form');
     this.rsAddressInput = this.rsSignInForm.querySelector('input[name=rs-user-address]');
-    this.rsConnectButton = document.querySelector('.rs-connect');
+    this.rsConnectButton = this.parentContainerEl.querySelector('.rs-connect');
 
-    this.rsDisconnectButton = document.querySelector('.rs-disconnect');
-    this.rsSyncButton = document.querySelector('.rs-sync');
-    this.rsLogo = document.querySelector('.rs-widget-icon');
+    this.rsDisconnectButton = this.parentContainerEl.querySelector('.rs-disconnect');
+    this.rsSyncButton = this.parentContainerEl.querySelector('.rs-sync');
+    this.rsLogo = this.parentContainerEl.querySelector('.rs-widget-icon');
 
-    this.rsErrorReconnectLink = document.querySelector('.rs-box-error a.rs-reconnect');
-    this.rsErrorDisconnectButton = document.querySelector('.rs-box-error button.rs-disconnect');
+    this.rsErrorReconnectLink = this.parentContainerEl.querySelector('.rs-box-error a.rs-reconnect');
+    this.rsErrorDisconnectButton = this.parentContainerEl.querySelector('.rs-box-error button.rs-disconnect');
 
-    this.rsConnectedUser = document.querySelector('.rs-connected-text h1.rs-user');
+    this.rsConnectedUser = this.parentContainerEl.querySelector('.rs-connected-text h1.rs-user');
   }
 
   /**
@@ -303,15 +289,37 @@ class Widget {
    *
    * @private
    */
-  setupHandlers () {
-    this.rs.on('pod-not-selected', () => this.eventHandler('pod-not-selected'));
-    this.rs.on('connected', () => this.eventHandler('connected'));
-    this.rs.on('ready', () => this.eventHandler('ready'));
-    this.rs.on('disconnected', () => this.eventHandler('disconnected'));
-    this.rs.on('network-online', () => this.eventHandler('network-online'));
-    this.rs.on('network-offline', () => this.eventHandler('network-offline'));
-    this.rs.on('error', (error) => this.eventHandler('error', error));
+  listen (name, handler) {
+    const guarded = (...args) => { if (!this.destroyed) handler(...args); };
+    this.rs.on(name, guarded);
+    this.subscriptions.push([name, guarded]);
+  }
 
+  destroy () {
+    this.destroyed = true;
+    for (const [name, handler] of this.subscriptions) {
+      this.rs.removeEventListener(name, handler);
+    }
+    this.subscriptions = [];
+    document.removeEventListener('click', this.outsideClick);
+    this.domElement?.remove();
+  }
+
+  setupHandlers () {
+    // Older builds without Solid do not declare this event.
+    if (this.solidEnabled) {
+      this.listen('pod-not-selected', () => this.eventHandler('pod-not-selected'));
+    }
+    this.listen('connected', () => this.eventHandler('connected'));
+    this.listen('ready', () => this.eventHandler('ready'));
+    this.listen('disconnected', () => this.eventHandler('disconnected'));
+    this.listen('network-online', () => this.eventHandler('network-online'));
+    this.listen('network-offline', () => this.eventHandler('network-offline'));
+    this.listen('error', (error) => this.eventHandler('error', error));
+
+    this.listen('sync-started', msg => this.eventHandler('sync-started', msg));
+    this.listen('sync-req-done', msg => this.eventHandler('sync-req-done', msg));
+    this.listen('sync-done', msg => this.eventHandler('sync-done', msg));
     this.setEventListeners();
     this.setClickHandlers();
   }
@@ -319,25 +327,33 @@ class Widget {
   /**
    * Append widget to the DOM.
    *
-   * If an elementId is specified, it will be appended to that element,
-   * otherwise it will be appended to the document's body.
+   * If a parentElement is specified, the widget will be appended to that
+   * element, otherwise it will be appended to the document's body. The parent
+   * element can be given either as a simple element ID or as a valid HTML
+   * element.
    *
-   * @param  {String} [elementId] - Widget's parent
+   * @param  {String,HTMLElement} [parentElement] - Parent element
+   * @throws {Error} If the element is not found or is of an unknown type.
    */
-  attach (elementId) {
-    const domElement = this.createHtmlTemplate();
+  attach (element) {
+    if (this.domElement) return;
+    const domElement = this.domElement = this.createHtmlTemplate(element);
 
-    let parentContainerEl;
+    this.parentContainerEl;
 
-    if (elementId) {
-      parentContainerEl = document.getElementById(elementId);
-      if (!parent) {
-        throw "Failed to find target DOM element with id=\"" + elementId + "\"";
+    if (element instanceof HTMLElement) {
+      this.parentContainerEl = element;
+    } else if (typeof element === "string") {
+      this.parentContainerEl = document.getElementById(element);
+      if (!this.parentContainerEl) {
+        throw new Error("Failed to find target DOM element with id=\"" + element + "\"");
       }
+    } else if (element) {
+      throw new Error("Unknown element type. Expected instance of HTMLElement or type of string.");
     } else {
-      parentContainerEl = document.body;
+      this.parentContainerEl = document.body;
     }
-    parentContainerEl.appendChild(domElement);
+    this.parentContainerEl.appendChild(domElement);
 
     this.setupElements();
     this.setupHandlers();
@@ -348,17 +364,14 @@ class Widget {
   setEventListeners () {
     this.rsSignInForm.addEventListener('submit', (e) => {
       e.preventDefault();
-      let userAddress = document.querySelector('input[name=rs-user-address]').value;
+      let userAddress = this.parentContainerEl.querySelector('input[name=rs-user-address]').value.trim();
       this.disableConnectButton();
       this.rs.connect(userAddress);
     });
 
     this.rsSolidForm.addEventListener('submit', (e) => {
       e.preventDefault();
-      let authURL = document.querySelector('input[name=rs-provider-address]').value;
-      this.disableSolidConnectButton();
-      this.rs["solid"].setAuthURL(authURL);
-      this.rs["solid"].connect()
+      this.connectSolid(this.rsProviderInput.value.trim());
     });
   }
 
@@ -367,27 +380,57 @@ class Widget {
    *
    * @private
    */
-  populatePodOptions() {
-    let podURLs = this.rs.solid.getPodURLs();
-    let optionsParent = this.rsSolidPodOptions[0].parentElement;
+  populatePodOptions () {
+    const podURLs = this.rs.solid.getPodURLs() || [];
+    const template = this.rsSolidPodOptions[0];
+    const parent = template.parentElement;
+    parent.replaceChildren();
+    this.rsSolidPodOptions = podURLs.map(url => {
+      const button = template.cloneNode(true);
+      button.lastElementChild.textContent = url;
+      button.addEventListener('click', () => this.selectPod(url));
+      parent.appendChild(button);
+      return button;
+    });
+  }
 
-    while (podURLs.length > optionsParent.childElementCount) {
-      optionsParent.removeChild(optionsParent.children[optionsParent.childElementCount - 1]);
-      this.rsSolidPodOptions.pop();
+  async selectPod (url) {
+    try {
+      await this.rs.solid.setPodURL(url);
+    } catch (error) {
+      this.handleSolidError(error);
     }
+  }
 
-    while (optionsParent.childElementCount < podURLs.length) {
-      this.rsSolidPodOptions.concat(this.rsSolidPodOptions[0].cloneNode(true));
+  async connectSolid (url) {
+    this.disableSolidConnectButton();
+    this.solidConnecting = true;
+    try {
+      if (!this.rs.solid) throw new Error('Solid storage is not available yet. Please try again.');
+      this.rs.solid.setAuthURL(url);
+      await this.rs.solid.connect();
+    } catch (error) {
+      this.handleSolidError(error);
     }
+  }
 
-    let rs = this.rs;
+  enableSolidConnectButton () {
+    this.solidConnecting = false;
+    this.rsSolidConnectButton.disabled = false;
+    this.rsSolidConnectButton.textContent = 'Connect';
+    this.rsSolidConnectButton.classList.remove('rs-connecting');
+  }
 
-    for (let i = 0; i < podURLs.length; i++) {
-      this.rsSolidPodOptions[i].children[1].textContent = podURLs[i];
-      this.rsSolidPodOptions[i].addEventListener('click', function() {
-        rs.solid.setPodURL(this.children[1].textContent);
-      });
-    }
+  handleSolidError (error) {
+    this.enableSolidConnectButton();
+    this.open();
+    this.setState('solid');
+    const message = this.rsSolidForm.querySelector('.rs-sign-in-error');
+    message.textContent = error.message || String(error);
+    message.classList.remove('rs-hidden');
+    message.classList.add('rs-visible');
+    // Errors also need to remain visible for configurations with only preset providers.
+    this.rsSolidForm.hidden = false;
   }
 
   /**
@@ -404,7 +447,7 @@ class Widget {
     }
     // choose backend only if some providers are declared
     if ((this.rs.apiKeys && Object.keys(this.rs.apiKeys).length > 0) ||
-    (this.solidProviders && Object.keys(this.solidProviders).length > 0)) {
+    this.solidEnabled) {
       this.setState('choose');
     } else {
       this.setState('sign-in');
@@ -430,13 +473,12 @@ class Widget {
     // Choose Solid button
     this.rsChooseSolidButton.addEventListener('click', () => {
       this.setState('solid');
-      this.rsProviderInput.focus();
+      if (this.solidProviders.allowAnyProvider) this.rsProviderInput.focus();
     });
 
     for (let i = 0; i < this.rsSolidOptions.length; i++) {
       this.rsSolidOptions[i].addEventListener('click', () => {
-        this.rs["solid"].setAuthURL(this.solidProviders.providers[i].authURL);
-        this.rs["solid"].connect()
+        this.connectSolid(this.solidProviders.providers[i].authURL);
       });
     }
 
@@ -461,7 +503,8 @@ class Widget {
     }
 
     // Reduce to icon only if connected and clicked outside of widget
-    document.addEventListener('click', () => this.close() );
+    this.outsideClick = () => this.close();
+    document.addEventListener('click', this.outsideClick);
 
     // Clicks on the widget stop the above event
     this.rsWidget.addEventListener('click', e => e.stopPropagation() );
@@ -496,7 +539,7 @@ class Widget {
     this.rsWidget.classList.remove('rs-closed');
     this.shouldCloseWhenSyncDone = false; // prevent auto-closing when user opened the widget
 
-    let selected = document.querySelector('.rs-box.rs-selected');
+    let selected = this.parentContainerEl.querySelector('.rs-box.rs-selected');
     if (selected) {
       selected.setAttribute('aria-hidden', 'false');
     }
@@ -509,13 +552,14 @@ class Widget {
    * the widget will not close.
    */
   close () {
+    if (this.destroyed) return;
     // don't do anything when we have an error
     if (this.state === 'error') { return; }
 
     if (!this.leaveOpen && this.active) {
       this.closed = true;
       this.rsWidget.classList.add('rs-closed');
-      let selected = document.querySelector('.rs-box.rs-selected');
+      let selected = this.parentContainerEl.querySelector('.rs-box.rs-selected');
       if (selected) {
         selected.setAttribute('aria-hidden', 'true');
       }
@@ -618,7 +662,7 @@ class Widget {
   }
 
   showErrorBox (errorMsg) {
-    this.rsErrorBox.innerHTML = errorMsg;
+    this.rsErrorBox.textContent = errorMsg;
     this.setState('error');
   }
 
@@ -627,16 +671,24 @@ class Widget {
     this.close();
   }
 
+  handleSyncStarted () {
+    this.syncInProgress = true;
+    this.rsSyncButton.classList.add("rs-rotate");
+    setTimeout(() => {
+      if (!this.syncInProgress) return;
+      this.rsConnectedLabel.textContent = 'Synchronizing';
+    }, 1000);
+  }
+
   handleDiscoveryError (error) {
-    let msgContainer = document.querySelector('.rs-sign-in-error');
-    msgContainer.innerHTML = error.message;
+    let msgContainer = this.parentContainerEl.querySelector('.rs-sign-in-error');
+    msgContainer.textContent = error.message;
     msgContainer.classList.remove('rs-hidden');
     msgContainer.classList.add('rs-visible');
     this.enableConnectButton();
   }
 
   handleSyncError (error) {
-    console.debug('Encountered SyncError', error);
     this.setOffline();
   }
 
@@ -658,12 +710,16 @@ class Widget {
     this.rsErrorDisconnectButton.classList.remove('rs-hidden');
   }
 
-  updateLastSyncedOutput () {
-    if (!this.lastSynced) { return; } // don't do anything when we've never synced yet
-    let now = new Date();
-    let secondsSinceLastSync = Math.round((now.getTime() - this.lastSynced.getTime())/1000);
-    let subHeadlineEl = document.querySelector('.rs-box-connected .rs-sub-headline');
-    subHeadlineEl.innerHTML = `Synced ${secondsSinceLastSync} seconds ago`;
+  updateLastSyncedStatus () {
+    const now = new Date();
+    if (this.online) {
+      this.lastSynced = now;
+      this.rsConnectedLabel.textContent = 'Synced';
+    } else {
+      if (!this.rsWidget.classList.contains('rs-state-unauthorized')) {
+        this.rsConnectedLabel.textContent = 'Offline';
+      }
+    }
   }
 
   isSmallScreen () {
