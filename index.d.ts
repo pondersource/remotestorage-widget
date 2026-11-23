@@ -1,4 +1,14 @@
+/** App-owned guest documents, including data outside the remoteStorage cache. */
+export interface GuestData {
+  export(): Promise<{ filename: string; type: string; body: BlobPart }>;
+  /** Resolve only after validation and local persistence complete. */
+  import(file: File): Promise<void | { message?: string }>;
+  accept?: string;
+  /** Return false to cancel connection without losing the guest session. */
+  beforeConnect?(): Promise<boolean | void>;
+}
 export interface WidgetOptions {
+  guestData?: GuestData;
   lwsOpenID?: { issuer: string; clientId: string; redirectUri: string; idTokenSigningAlg?: string };
   solidProviders?: { providers?: { name: string; authURL: string }[]; allowAnyProvider?: boolean };
   leaveOpen?: boolean;

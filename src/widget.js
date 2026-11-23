@@ -19,6 +19,10 @@ class Widget {
   constructor (remoteStorage, options={}) {
     this.rs = remoteStorage;
     this.lwsOpenID = options.lwsOpenID;
+    if (options.guestData && (typeof options.guestData.export !== 'function' || typeof options.guestData.import !== 'function')) {
+      throw new TypeError('options.guestData requires export and import functions');
+    }
+    this.guestData = options.guestData;
 
     this.solidProviders = options.solidProviders || {};
     this.leaveOpen         = options.leaveOpen ? options.leaveOpen : false;
@@ -265,6 +269,7 @@ class Widget {
     this.rsChooseNextGraphButton = this.parentContainerEl.querySelector('.rs-choose-nextgraph');
     this.rsExportButton = this.parentContainerEl.querySelector('.rs-export-guest');
     this.rsImport = this.parentContainerEl.querySelector('.rs-nextgraph-import');
+    if (this.guestData?.accept) this.rsImport.querySelector('input').accept = this.guestData.accept;
     this.rsChooseAtomicButton.hidden = !this.rs.constructor.AtomicPlugin;
     this.rsChooseNextGraphButton.hidden = !this.rs.nextgraph;
     this.rsExportButton.hidden = !this.rs.nextgraph;
@@ -581,18 +586,30 @@ class Widget {
     });
     this.rsChooseNextGraphButton.addEventListener('click', async () => {
       this.rsChooseNextGraphButton.disabled = true; this.rsStorageError.textContent = '';
-      try { await this.rs.nextgraph.connect(); }
+      try {
+        if (await this.guestData?.beforeConnect?.() === false) return;
+        await this.rs.nextgraph.connect();
+      }
       catch (error) { this.rsStorageError.textContent = error.message || String(error); }
       finally { this.rsChooseNextGraphButton.disabled = false; }
     });
     this.rsExportButton.addEventListener('click', async () => {
       this.rsExportButton.disabled = true; this.rsStorageError.textContent = '';
       try {
-        const snapshot = await this.rs.nextgraph.exportSnapshot();
-        const url = URL.createObjectURL(new Blob([JSON.stringify(snapshot)], {type:'application/json'}));
-        const link = document.createElement('a'); link.href = url; link.download = 'remotestorage-guest-data.json'; link.click();
+        const snapshot = this.guestData ? null : await this.rs.nextgraph.exportSnapshot();
+        const exported = this.guestData ? await this.guestData.export() : {
+          filename: 'remotestorage-guest-data.json', type: 'application/json', body: JSON.stringify(snapshot)
+        };
+        if (!exported || typeof exported.filename !== 'string' || !exported.filename ||
+            typeof exported.type !== 'string' || exported.body === undefined) {
+          throw new TypeError('Guest export requires a filename, type and body');
+        }
+        const url = URL.createObjectURL(new Blob([exported.body], {type:exported.type}));
+        const link = document.createElement('a'); link.href = url; link.download = exported.filename; link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-        this.rsStorageError.textContent = 'Exported ' + snapshot.records.length + ' documents. Keep this file until import succeeds.';
+        this.rsStorageError.textContent = snapshot
+          ? 'Exported ' + snapshot.records.length + ' documents. Keep this file until import succeeds.'
+          : 'Exported guest data from this app. Keep this file until import succeeds.';
       } catch (error) { this.rsStorageError.textContent = error.message || String(error); }
       finally { this.rsExportButton.disabled = false; }
     });
@@ -602,6 +619,11 @@ class Widget {
       const file = input.files[0]; if (!file) return;
       input.disabled = true; message.textContent = 'Importing…';
       try {
+        if (this.guestData) {
+          const result = await this.guestData.import(file);
+          message.textContent = result?.message || 'Imported guest data into this app. Keep your export file.';
+          return;
+        }
         if (file.size > 50 * 1024 * 1024) throw new Error('Import files must be smaller than 50 MiB.');
         const results = await this.rs.nextgraph.importSnapshot(JSON.parse(await file.text()));
         const imported = results.filter(item => item.statusCode === 201).length;
