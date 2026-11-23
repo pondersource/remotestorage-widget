@@ -82,6 +82,22 @@ pods, no-pod errors, authorization renewal and disconnect. Provider and pod name
 are rendered as text. Call `destroy()` when removing a widget to release its
 listeners; `attach()` can attach it again after a route replaces its container.
 
+## App guest documents
+
+Apps with guest documents outside the remoteStorage cache can pass `guestData`
+to the widget. Both `export()` and `import(file)` are required. Export returns
+`{ filename, type, body }`, where `body` can be a string, Blob or binary bytes.
+Import receives the original `File`; the app validates its format and size and
+resolves only after local persistence completes. Its optional `{ message }`
+result is displayed as text. The widget does not start sync for app-owned imports.
+
+Use `accept` to specify the app's file types and optional async `beforeConnect()`
+to prepare a guest backup before Nextgraph opens its native connection flow.
+Returning `false` cancels connection; an error displays a retryable message.
+Without these hooks, the existing remoteStorage snapshot transfer is used.
+These hooks transfer local documents; successful import does not confirm server
+delivery. Apps should retain the export until their own sync is verified.
+
 ## Tests
 
 Run `npm ci`, `npx playwright install chromium`, `npm run build`, and `npm test`.

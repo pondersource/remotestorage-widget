@@ -183,3 +183,101 @@ test('OneDrive native reconnect failures keep the retry link and show the error'
  assert.match(await p.locator('.rs-box-error').innerText(),/Popup cancelled/);
  assert.equal(await p.locator('.rs-box-error .rs-reconnect').isVisible(),true);
 });
+
+test('app guest handoff exports complete app bytes and imports the original file', async t => {
+ const p = await open(t);
+ await p.evaluate(() => {
+   widget.destroy();
+   rs.nextgraph = {
+     async connect() { rs.backend='nextgraph'; rs.connected=true; rs.emit('connected'); },
+     async exportSnapshot() { throw Error('The app must not export the RS cache'); },
+     async importSnapshot() { throw Error('The app must not import the RS cache'); }
+   };
+   rs.startSync = () => { throw Error('The app owns its import sync'); };
+   widget = new Widget(rs, {skipInitial:true,leaveOpen:true,guestData:{
+     accept:'.zip,application/zip',
+     async export() { return {filename:'all-projects.zip',type:'application/zip',body:new Uint8Array([80,75,0,255])}; },
+     async import(file) {
+       calls.push(['app-import',file instanceof File,file.name,file.type,file.size,Array.from(new Uint8Array(await file.arrayBuffer()))]);
+       return {message:'Imported <projects> locally'};
+     }
+   }});
+   widget.attach('widget');
+ });
+ const downloaded = p.waitForEvent('download');
+ await p.locator('.rs-export-guest').click();
+ const file = await downloaded;
+ assert.equal(file.suggestedFilename(), 'all-projects.zip');
+ assert.deepEqual(await require('node:fs/promises').readFile(await file.path()), Buffer.from([80,75,0,255]));
+ await p.locator('.rs-choose-nextgraph').click();
+ const input = p.locator('.rs-nextgraph-import input');
+ assert.equal(await input.getAttribute('accept'), '.zip,application/zip');
+ await input.setInputFiles({name:'projects.zip',mimeType:'application/zip',buffer:Buffer.from([80,75,0,255])});
+ await p.waitForFunction(() => document.querySelector('.rs-nextgraph-import [role=status]').textContent === 'Imported <projects> locally');
+ assert.deepEqual(await p.evaluate(() => calls), [['app-import',true,'projects.zip','application/zip',4,[80,75,0,255]]]);
+ assert.equal(await p.locator('.rs-nextgraph-import [role=status] projects').count(), 0);
+ assert.equal(await input.isEnabled(), true);
+});
+
+test('guest handoff waits for preflight, cancellation and failure preserve retry', async t => {
+ const p = await open(t);
+ await p.evaluate(() => {
+   widget.destroy();
+   rs.nextgraph = {async connect() { calls.push(['connect']); }};
+   widget = new Widget(rs, {skipInitial:true,leaveOpen:true,guestData:{
+     async export() { throw Error('Guest database unavailable'); }, async import() {},
+     beforeConnect() { return new Promise((resolve,reject) => {window.finishPreflight=resolve;window.failPreflight=reject;}); }
+   }});
+   widget.attach('widget');
+ });
+ const button = p.locator('.rs-choose-nextgraph');
+ await button.click();
+ assert.equal(await button.isDisabled(), true);
+ assert.deepEqual(await p.evaluate(() => calls), []);
+ await p.evaluate(() => finishPreflight(false));
+ await p.waitForFunction(() => !document.querySelector('.rs-choose-nextgraph').disabled);
+ assert.deepEqual(await p.evaluate(() => calls), []);
+ await button.click();
+ await p.evaluate(() => failPreflight(Error('Save your guest backup first')));
+ await p.waitForFunction(() => !document.querySelector('.rs-choose-nextgraph').disabled);
+ assert.match(await p.locator('.rs-storage-error').innerText(), /Save your guest backup first/);
+ await button.click(); await p.evaluate(() => finishPreflight());
+ await p.waitForFunction(() => calls.length === 1);
+ await p.locator('.rs-export-guest').click();
+ assert.match(await p.locator('.rs-storage-error').innerText(), /Guest database unavailable/);
+ assert.equal(await p.locator('.rs-export-guest').isEnabled(), true);
+ assert.equal(await p.evaluate(() => {
+   try { new Widget(rs,{guestData:{export(){}}}); return false; }
+   catch(error) { return error instanceof TypeError; }
+ }), true);
+});
+
+test('app import owns size validation and reports persistence failures without syncing', async t => {
+ const p = await open(t);
+ await p.evaluate(() => {
+   widget.destroy();
+   rs.nextgraph = {async connect() { rs.backend='nextgraph';rs.connected=true;rs.emit('connected'); }};
+   rs.startSync = () => calls.push(['unexpected-sync']);
+   widget = new Widget(rs,{skipInitial:true,leaveOpen:true,guestData:{
+     async export() {}, async import(file) {
+       calls.push(['size',file.size]);
+       if (window.failImport) throw Error('Local transaction aborted');
+     }
+   }});
+   widget.attach('widget');
+ });
+ await p.locator('.rs-choose-nextgraph').click();
+ await p.evaluate(() => {
+   const transfer=new DataTransfer();
+   transfer.items.add(new File([new Uint8Array(50*1024*1024+1)],'large.zip'));
+   const input=document.querySelector('.rs-nextgraph-import input');
+   input.files=transfer.files;input.dispatchEvent(new Event('change'));
+ });
+ await p.waitForFunction(() => document.querySelector('.rs-nextgraph-import [role=status]').textContent.startsWith('Imported guest'));
+ assert.deepEqual(await p.evaluate(() => calls), [['size',50*1024*1024+1]]);
+ await p.evaluate(() => window.failImport=true);
+ await p.locator('.rs-nextgraph-import input').setInputFiles({name:'retry.zip',mimeType:'application/zip',buffer:Buffer.from('retry')});
+ await p.waitForFunction(() => document.querySelector('.rs-nextgraph-import [role=status]').textContent === 'Local transaction aborted');
+ assert.equal(await p.locator('.rs-nextgraph-import input').isEnabled(), true);
+ assert.equal(await p.locator('.rs-nextgraph-import input').inputValue(), '');
+});
