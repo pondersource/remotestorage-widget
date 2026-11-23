@@ -90,7 +90,7 @@ Set `CHROMIUM_PATH` to use an existing Chromium installation.
 `npm run test:solid` additionally tests real OAuth, private module storage,
 reload, a fresh browser context, deletion and disconnect against Community Solid
 Server. Set `RS_SOLID_SOURCE` to a checkout of rs.js commit
-`c0f41cb89aba7e45524897e7d7fde190f6d57144`, run `npm ci && npm run build:js && npm run build:solid` in that
+`f2e11650ade5832374b6dc3cdbf0dec03fb28dd9`, run `npm ci && npm run build:js && npm run build:solid` in that
 checkout, then `npm ci` in its `examples/solid` directory. Start
 `node tests/server.cjs` there with `RS_SOLID_TEST_PASSWORD` set to a disposable
 password. Run the widget's `npm run test:solid` with the same environment.
