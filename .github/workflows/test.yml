@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: remotestorage/remotestorage.js
-          ref: c0f41cb89aba7e45524897e7d7fde190f6d57144
+          ref: f2e11650ade5832374b6dc3cdbf0dec03fb28dd9
           path: .rs-solid
       - run: npm ci && npm run build:js && npm run build:solid
         working-directory: .rs-solid
