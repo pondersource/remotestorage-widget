@@ -1,4 +1,5 @@
 export interface WidgetOptions {
+  lwsOpenID?: { issuer: string; clientId: string; redirectUri: string; idTokenSigningAlg?: string };
   solidProviders?: { providers?: { name: string; authURL: string }[]; allowAnyProvider?: boolean };
   leaveOpen?: boolean;
   autoCloseAfter?: number;

@@ -18,6 +18,7 @@ import circleOpenSvg from './assets/circle-open.svg';
 class Widget {
   constructor (remoteStorage, options={}) {
     this.rs = remoteStorage;
+    this.lwsOpenID = options.lwsOpenID;
 
     this.solidProviders = options.solidProviders || {};
     this.leaveOpen         = options.leaveOpen ? options.leaveOpen : false;
@@ -117,7 +118,8 @@ class Widget {
         let connectedUser = this.rs.remote.userAddress;
         this.rsConnectedUser.textContent = connectedUser;
         this.setBackendClass(this.rs.backend);
-        this.rsConnectedLabel.textContent = 'Connected';
+        this.rsConnectedLabel.textContent = this.rs.backend === 'nextgraph' ? 'Saved on this device' : 'Connected';
+        this.rsImport.hidden = this.rs.backend !== 'nextgraph';
         this.setState('connected');
         break;
       case 'network-offline':
@@ -128,11 +130,28 @@ class Widget {
         break;
       case 'error':
         this.setBackendClass(this.rs.backend);
+        if (this.rs.backend === 'nextgraph') {
+          this.open();
+          if (this.active) {
+            this.rsConnectedLabel.textContent = 'Needs attention';
+            const reload = this.rs.nextgraph?.requiresReload;
+            this.rsImport.querySelector('[role=status]').textContent = reload
+              ? 'Reload this app to reopen Nextgraph after the save error. Keep your export file.'
+              : msg?.message || String(msg);
+            this.rsImport.querySelector('input').disabled = !!reload;
+          }
+          else { this.showChooseOrSignIn(); this.rsStorageError.textContent = msg?.message || String(msg); }
+          break;
+        }
         if (this.solidConnecting || (this.rs.backend === 'solid' && !this.rs.connected && msg?.name !== 'Unauthorized')) {
           this.handleSolidError(msg);
           break;
         }
 
+        if (this.rs.backend === 'onedrive' && !this.rs.connected && msg?.name !== 'Unauthorized') {
+          this.handleUnauthorized({message: msg?.message || String(msg)});
+          break;
+        }
         if (msg?.name === 'DiscoveryError') {
           this.handleDiscoveryError(msg);
         } else if (msg?.name === 'SyncError') {
@@ -241,6 +260,22 @@ class Widget {
     this.rsChooseGoogleDriveButton = this.parentContainerEl.querySelector('button.rs-choose-googledrive');
     this.rsErrorBox = this.parentContainerEl.querySelector('.rs-box-error .rs-error-message');
     this.rsSolid = this.parentContainerEl.querySelector('.rs-box-solid');
+    this.rsChooseLWSButton = this.parentContainerEl.querySelector('.rs-choose-lws');
+    this.rsChooseAtomicButton = this.parentContainerEl.querySelector('.rs-choose-atomic');
+    this.rsChooseNextGraphButton = this.parentContainerEl.querySelector('.rs-choose-nextgraph');
+    this.rsExportButton = this.parentContainerEl.querySelector('.rs-export-guest');
+    this.rsImport = this.parentContainerEl.querySelector('.rs-nextgraph-import');
+    this.rsChooseAtomicButton.hidden = !this.rs.constructor.AtomicPlugin;
+    this.rsChooseNextGraphButton.hidden = !this.rs.nextgraph;
+    this.rsExportButton.hidden = !this.rs.nextgraph;
+    this.rsImport.hidden = true;
+    this.rsChooseOneDriveButton = this.parentContainerEl.querySelector('.rs-choose-onedrive');
+    this.rsLWSForm = this.parentContainerEl.querySelector('.rs-lws-form');
+    this.rsLWSError = this.rsLWSForm.querySelector('[role=alert]');
+    this.rsStorageError = this.parentContainerEl.querySelector('.rs-storage-error');
+    this.rsChooseLWSButton.hidden = !this.rs.lws;
+    this.rsChooseOneDriveButton.hidden = !this.rs.onedrive || !this.rs.apiKeys?.onedrive;
+    if (this.rs.lws && this.lwsOpenID) this.rs.lws.configureOpenID(this.lwsOpenID);
     this.rsChooseSolidButton = this.parentContainerEl.querySelector('button.rs-choose-solid');
     this.rsSolidOptions = [this.parentContainerEl.querySelector('button.rs-option-solid')];
     this.rsSolidPodOptions = [this.parentContainerEl.querySelector('button.rs-choose-pod')];
@@ -365,6 +400,56 @@ class Widget {
     this.setModalClass();
     this.setupHandlers();
     this.restorePodSelection();
+    this.resumeLWS();
+  }
+
+  async resumeLWS () {
+    if (!this.rs.lws || !this.lwsOpenID) return;
+    try { await this.rs.lws.handleIncomingRedirect(); }
+    catch (error) { this.setState('lws'); this.rsLWSError.textContent = error.message; }
+  }
+
+  showNextGraphConflicts () {
+    const container = this.rsImport.querySelector('.rs-document-conflicts');
+    container.replaceChildren();
+    try {
+      if (this.rs.nextgraph.requiresReload) { container.textContent = 'Reload this app to reopen Nextgraph after the save error.'; return; }
+      const conflicts = this.rs.nextgraph.listConflicts();
+      if (!conflicts.length) { container.textContent = 'No document conflicts.'; return; }
+      for (const conflict of conflicts) {
+        const group = document.createElement('fieldset');
+        const title = document.createElement('legend'); title.textContent = conflict.path; group.append(title);
+        const help = document.createElement('p'); help.textContent = 'Choose the version to keep. Both versions remain in document history.'; group.append(help);
+        for (const revision of conflict.revisions) {
+          const label = document.createElement('p');
+          label.textContent = (revision.deleted ? 'Deleted' : revision.file.contentType) + ' — ' + new Date(revision.created).toLocaleString();
+          const details = document.createElement('details'), summary = document.createElement('summary');
+          summary.textContent = 'View stored version'; details.append(summary);
+          const preview = document.createElement('pre');
+          // Byte envelopes can be downloaded without interpreting untrusted HTML.
+          preview.textContent = revision.id; details.append(preview);
+          if (!revision.deleted) {
+            const download = document.createElement('button'); download.type = 'button'; download.textContent = 'Download version';
+            download.addEventListener('click', () => {
+              const raw = atob(revision.file.data.replace(/-/g, '+').replace(/_/g, '/'));
+              const bytes = Uint8Array.from(raw, char => char.charCodeAt(0));
+              const url = URL.createObjectURL(new Blob([bytes], {type:'application/octet-stream'}));
+              const link = document.createElement('a'); link.href = url; link.download = conflict.path.split('/').pop(); link.click();
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            });
+            details.append(download);
+          }
+          const choose = document.createElement('button'); choose.type = 'button'; choose.textContent = revision.deleted ? 'Keep deletion' : 'Keep this version';
+          choose.addEventListener('click', async () => {
+            choose.disabled = true;
+            try { await this.rs.nextgraph.resolveConflict(conflict.path, revision.id, conflict.revisions.map(record => record.id)); this.showNextGraphConflicts(); this.rs.startSync(); }
+            catch (error) { help.textContent = error.message || String(error); choose.disabled = false; }
+          });
+          group.append(label, details, choose);
+        }
+        container.append(group);
+      }
+    } catch (error) { container.textContent = error.message || String(error); }
   }
 
   restorePodSelection () {
@@ -375,6 +460,17 @@ class Widget {
   }
 
   setEventListeners () {
+    this.rsLWSForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const button = this.rsLWSForm.querySelector('[type=submit]');
+      button.disabled = true; this.rsLWSError.textContent = '';
+      try {
+        this.rs.lws.setStorageURL(this.rsLWSForm.elements['rs-lws-address'].value.trim());
+        await this.rs.lws.connect();
+      } catch (error) {
+        if (!error.redirecting) this.rsLWSError.textContent = error.message || String(error);
+      } finally { button.disabled = false; }
+    });
     this.rsSignInForm.addEventListener('submit', (e) => {
       e.preventDefault();
       let userAddress = this.parentContainerEl.querySelector('input[name=rs-user-address]').value.trim();
@@ -467,7 +563,7 @@ class Widget {
     }
     // choose backend only if some providers are declared
     if ((this.rs.apiKeys && Object.keys(this.rs.apiKeys).length > 0) ||
-    this.solidEnabled) {
+    this.solidEnabled || this.rs.lws || this.rs.onedrive || this.rs.nextgraph || this.rs.constructor.AtomicPlugin) {
       this.setState('choose');
     } else {
       this.setState('sign-in');
@@ -478,8 +574,47 @@ class Widget {
     // Initial button
     this.rsInitial.addEventListener('click', () => this.showChooseOrSignIn() );
 
+    this.rsChooseAtomicButton.addEventListener('click', () => {
+      this.rsSignInForm.querySelector('h1').textContent = 'Connect AtomicServer';
+      this.rsSignInForm.querySelector('.rs-atomic-help').hidden = false;
+      this.setState('sign-in'); this.rsAddressInput.focus();
+    });
+    this.rsChooseNextGraphButton.addEventListener('click', async () => {
+      this.rsChooseNextGraphButton.disabled = true; this.rsStorageError.textContent = '';
+      try { await this.rs.nextgraph.connect(); }
+      catch (error) { this.rsStorageError.textContent = error.message || String(error); }
+      finally { this.rsChooseNextGraphButton.disabled = false; }
+    });
+    this.rsExportButton.addEventListener('click', async () => {
+      this.rsExportButton.disabled = true; this.rsStorageError.textContent = '';
+      try {
+        const snapshot = await this.rs.nextgraph.exportSnapshot();
+        const url = URL.createObjectURL(new Blob([JSON.stringify(snapshot)], {type:'application/json'}));
+        const link = document.createElement('a'); link.href = url; link.download = 'remotestorage-guest-data.json'; link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        this.rsStorageError.textContent = 'Exported ' + snapshot.records.length + ' documents. Keep this file until import succeeds.';
+      } catch (error) { this.rsStorageError.textContent = error.message || String(error); }
+      finally { this.rsExportButton.disabled = false; }
+    });
+    this.rsImport.querySelector('.rs-show-conflicts').addEventListener('click', () => this.showNextGraphConflicts());
+    this.rsImport.querySelector('input').addEventListener('change', async event => {
+      const input = event.target, message = this.rsImport.querySelector('[role=status]');
+      const file = input.files[0]; if (!file) return;
+      input.disabled = true; message.textContent = 'Importing…';
+      try {
+        if (file.size > 50 * 1024 * 1024) throw new Error('Import files must be smaller than 50 MiB.');
+        const results = await this.rs.nextgraph.importSnapshot(JSON.parse(await file.text()));
+        const imported = results.filter(item => item.statusCode === 201).length;
+        message.textContent = 'Imported ' + imported + ' of ' + results.length + ' documents. Existing documents were kept. Keep your export file.';
+        this.rs.startSync();
+      } catch (error) { message.textContent = error.message || String(error); }
+      finally { input.disabled = false; input.value = ''; }
+    });
+
     // Choose RS button
     this.rsChooseRemoteStorageButton.addEventListener('click', () => {
+      this.rsSignInForm.querySelector('h1').textContent = 'Connect your storage';
+      this.rsSignInForm.querySelector('.rs-atomic-help').hidden = true;
       this.setState('sign-in');
       this.rsAddressInput.focus();
     });
@@ -489,6 +624,17 @@ class Widget {
 
     // Choose Google Drive button
     this.rsChooseGoogleDriveButton.addEventListener('click', () => this.rs["googledrive"].connect() );
+
+    this.rsChooseLWSButton.addEventListener('click', () => {
+      this.setState('lws'); this.rsLWSForm.elements['rs-lws-address'].focus();
+    });
+    this.parentContainerEl.querySelector('.rs-lws-back').addEventListener('click', () => this.showChooseOrSignIn());
+    this.rsChooseOneDriveButton.addEventListener('click', async () => {
+      this.rsChooseOneDriveButton.disabled = true; this.rsStorageError.textContent = '';
+      try { await this.rs.onedrive.connect(); }
+      catch (error) { this.rsStorageError.textContent = error.message || String(error); }
+      finally { this.rsChooseOneDriveButton.disabled = false; }
+    });
 
     // Choose Solid button
     this.rsChooseSolidButton.addEventListener('click', () => {
@@ -674,7 +820,7 @@ class Widget {
     this.rsWidget.classList.remove('rs-backend-remotestorage');
     this.rsWidget.classList.remove('rs-backend-dropbox');
     this.rsWidget.classList.remove('rs-backend-googledrive');
-    this.rsWidget.classList.remove('rs-backend-solid');
+    this.rsWidget.classList.remove('rs-backend-solid', 'rs-backend-lws', 'rs-backend-onedrive', 'rs-backend-nextgraph');
 
     if (backend) {
       this.rsWidget.classList.add(`rs-backend-${backend}`);
@@ -731,6 +877,10 @@ class Widget {
   }
 
   updateLastSyncedStatus () {
+    if (this.rs.backend === 'nextgraph') {
+      this.rsConnectedLabel.textContent = this.rs.nextgraph.deliveryState === 'needs-attention' ? 'Needs attention' : 'Saved on this device';
+      return;
+    }
     const now = new Date();
     if (this.online) {
       this.lastSynced = now;

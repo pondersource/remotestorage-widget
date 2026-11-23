@@ -238,6 +238,7 @@ polygon.rs-logo-shape,
   box-shadow: none;
 }
 .rs-sign-in-form button.rs-connect,
+.rs-lws-form button.rs-lws-connect,
 .rs-solid-form button.rs-solid-connect {
   padding: 15px 10px;
   margin-top: 20px;
@@ -435,3 +436,18 @@ polygon.rs-logo-shape,
 .rs-widget [hidden] { display: none !important; }
 .rs-solid-form input { font-size: 1rem; }
 .rs-box-choose-pod.rs-selected { max-height: 80vh; overflow-y: auto; }
+
+/* Extra backends share the provider chooser and connected/sync controls. */
+.rs-state-choose .rs-box.rs-selected:not([aria-hidden=true]) { max-height: min(80vh, 700px); overflow-y: auto; }
+.rs-lws-mark, .rs-onedrive-mark { display: none; }
+.rs-widget.rs-backend-lws .rs-lws-mark,
+.rs-widget.rs-backend-onedrive .rs-onedrive-mark { display: block; font: bold 20px system-ui; }
+.rs-lws-form input[type=url] { padding: 15px 10px; display: block; width: 100%; box-sizing: border-box; font: inherit; }
+
+.rs-nextgraph-import { padding: 12px; max-width: 280px; font-size: 14px; }
+.rs-nextgraph-import input { display: block; width: 100%; margin-top: 8px; font-size: 1rem; }
+.rs-atomic-help { font-size: 14px; }
+
+.rs-state-connected .rs-box.rs-selected:not([aria-hidden=true]) { max-height: 80vh; overflow-y: auto; }
+.rs-document-conflicts fieldset { min-width: 0; overflow-wrap: anywhere; }
+.rs-document-conflicts pre { white-space: pre-wrap; }
