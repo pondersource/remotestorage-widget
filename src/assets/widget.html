@@ -19,6 +19,8 @@
 <div class="rs-widget rs-state-initial">
 
   <div class="rs-widget-icon">
+    <span class="rs-main-logo rs-lws-mark" aria-label="LWS storage">LWS</span>
+    <span class="rs-main-logo rs-onedrive-mark" aria-label="OneDrive storage">OD</span>
     <svg class="rs-main-logo" id="rs-main-logo-remotestorage" xmlns="http://www.w3.org/2000/svg" version="1.1"
          xml:space="preserve" width="0.739008in" height="0.853339in"
          style="shape-rendering:geometricPrecision; text-rendering:geometricPrecision; image-rendering:optimizeQuality; fill-rule:evenodd; clip-rule:evenodd"
@@ -233,6 +235,12 @@
     <div class="rs-connected-text">
       <h1 class="rs-user rs-small-headline">user@provider.com</h1>
       <span class="rs-sub-headline">Connected</span>
+    </div>
+    <div class="rs-nextgraph-import" hidden>
+      <label>Import guest data <input type="file" accept="application/json,.json"></label>
+      <p role="status"></p>
+      <button type="button" class="rs-button rs-show-conflicts">Resolve document conflicts</button>
+      <div class="rs-document-conflicts"></div>
     </div>
     <div class="rs-connected-buttons">
       <button class="rs-button rs-button-small rs-sync" title="Sync now">
@@ -478,6 +486,12 @@
           </svg>
           <div>Google Drive</div>
         </button>
+        <button class="rs-button rs-button-big rs-choose-lws" type="button"><div>LWS</div></button>
+        <button class="rs-button rs-button-big rs-choose-onedrive" type="button"><div>OneDrive</div></button>
+        <button class="rs-button rs-button-big rs-choose-atomic" type="button"><div>AtomicServer</div></button>
+        <button class="rs-button rs-button-big rs-choose-nextgraph" type="button"><div>Nextgraph</div></button>
+        <button class="rs-button rs-export-guest" type="button">Export guest data for Nextgraph</button>
+        <p class="rs-storage-error" role="alert"></p>
         <button class="rs-button rs-button-big rs-choose-solid">
           <svg class="solid-logo" width="40" height="40"
                xml:space="preserve" viewBox="0 0 352 322" xmlns="http://www.w3.org/2000/svg">
@@ -523,6 +537,7 @@
     <div class="rs-content">
       <form name="rs-sign-in-form" class="rs-sign-in-form">
         <h1 class="rs-big-headline">Connect your storage</h1>
+        <p class="rs-atomic-help" hidden>Enter the storage address from your Atomic remoteStorage installation. Your server will ask you to approve access.</p>
         <input type="text" name="rs-user-address" placeholder="user@provider.com" autocomplete="username" autocapitalize="off" spellcheck="false">
         <div class="rs-sign-in-error rs-hidden"></div>
         <button type="submit" class="rs-connect">Connect</button>
@@ -555,6 +570,18 @@
         <button type="submit" class="rs-solid-connect">Connect</button>
       </form>
       <div class="rs-sign-in-error rs-hidden" role="alert"></div>
+    </div>
+  </div>
+<div class="rs-box rs-box-lws" aria-hidden="true">
+    <div class="rs-content">
+      <form class="rs-lws-form">
+        <h1 class="rs-big-headline">Connect your LWS storage</h1>
+        <label for="rs-lws-address">Storage address</label>
+        <input id="rs-lws-address" name="rs-lws-address" type="url" required placeholder="https://storage.example/alice/" autocomplete="url">
+        <div class="rs-lws-error" role="alert"></div>
+        <button type="submit" class="rs-lws-connect">Connect</button>
+        <button type="button" class="rs-button rs-lws-back">Other storage</button>
+      </form>
     </div>
   </div>
 </div>

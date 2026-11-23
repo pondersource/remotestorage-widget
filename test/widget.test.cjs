@@ -111,3 +111,75 @@ test('preset-only provider failure leaves arbitrary issuer input hidden', async 
  await p.getByRole('button', {name:'Example',exact:true}).click();
  assert.equal(await p.locator('.rs-box-solid [role=alert]').isVisible(), false);
 });
+
+test('LWS connection, retry and navigation use the shared widget',async t=>{
+ const p=await open(t);
+ await p.evaluate(()=>{
+   rs.lws={setStorageURL(url){calls.push(['lws-address',url]);},async connect(){if(window.failLWS)throw Error('LWS failed');calls.push(['lws-connect']);}};
+   widget.attach('widget'); // already mounted; remount explicitly below
+   widget.destroy();widget.attach('widget');
+ });
+ await p.locator('.rs-choose-lws').click();
+ await p.locator('[name=rs-lws-address]').fill('https://storage.example.test/');
+ await p.evaluate(()=>window.failLWS=true);await p.locator('.rs-lws-connect').click();
+ assert.match(await p.locator('.rs-box-lws').innerText(),/LWS failed/);
+ assert.equal(await p.locator('.rs-lws-connect').isEnabled(),true);
+ await p.evaluate(()=>window.failLWS=false);await p.locator('.rs-lws-connect').click();
+ assert.ok((await p.evaluate(()=>calls)).some(call=>call[0]==='lws-connect'));
+ await p.locator('.rs-lws-back').click();assert.equal(await p.locator('.rs-choose-lws').isVisible(),true);
+});
+
+test('OneDrive popup errors remain recoverable in the provider chooser',async t=>{
+ const p=await open(t);
+ await p.evaluate(()=>{
+   rs.apiKeys.onedrive={clientId:'test'};
+   rs.onedrive={async connect(){if(window.failOneDrive)throw Error('Popup cancelled');calls.push(['onedrive']);}};
+   widget.destroy();widget.attach('widget');window.failOneDrive=true;
+ });
+ await p.locator('.rs-choose-onedrive').click();assert.match(await p.locator('.rs-storage-error').innerText(),/Popup cancelled/);
+ assert.equal(await p.locator('.rs-choose-onedrive').isEnabled(),true);
+ await p.evaluate(()=>window.failOneDrive=false);await p.locator('.rs-choose-onedrive').click();
+ assert.ok((await p.evaluate(()=>calls)).some(call=>call[0]==='onedrive'));
+ await p.setViewportSize({width:320,height:568});
+ assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
+});
+
+test('Atomic uses discovery and consent; Nextgraph uses its native connection and explicit import',async t=>{
+ const p=await open(t);
+ await p.evaluate(()=>{
+   rs.constructor={AtomicPlugin:true};
+   rs.nextgraph={deliveryState:'local',async connect(){if(window.failNG)throw Error('Wallet cancelled');calls.push(['nextgraph']);rs.backend='nextgraph';rs.connected=true;rs.emit('connected');},
+     async importSnapshot(data){calls.push(['import',data.version]);return data.records.map(r=>({path:r.path,statusCode:201}));}};
+   widget.destroy();widget.attach('widget');
+ });
+ await p.locator('.rs-choose-atomic').click();
+ assert.match(await p.locator('.rs-atomic-help').innerText(),/installation/);
+ await p.locator('[name=rs-user-address]').fill('alice@installation.example.test');await p.locator('.rs-connect').click();
+ assert.deepEqual((await p.evaluate(()=>calls))[0],['rs','alice@installation.example.test']);
+ await p.evaluate(()=>{widget.showChooseOrSignIn();window.failNG=true;});
+ await p.locator('.rs-choose-nextgraph').click();assert.match(await p.locator('.rs-storage-error').innerText(),/Wallet cancelled/);
+ assert.equal(await p.locator('.rs-choose-nextgraph').isEnabled(),true);
+ await p.evaluate(()=>window.failNG=false);await p.locator('.rs-choose-nextgraph').click();
+ assert.equal(await p.locator('.rs-nextgraph-import').isVisible(),true);
+ await p.evaluate(()=>rs.emit('sync-done',{completed:true}));
+ assert.equal(await p.locator('.rs-box-connected .rs-sub-headline').textContent(),'Saved on this device');
+ await p.locator('.rs-nextgraph-import input').setInputFiles({name:'guest.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({version:1,records:[{path:'/notes/a'}]}))});
+ await p.waitForFunction(()=>document.querySelector('.rs-nextgraph-import [role=status]').textContent.startsWith('Imported'));
+ assert.match(await p.locator('.rs-nextgraph-import [role=status]').innerText(),/Imported 1 of 1/);
+ await p.evaluate(()=>{rs.nextgraph.deliveryState='needs-attention';rs.emit('sync-done',{completed:true});});
+ assert.equal(await p.locator('.rs-box-connected .rs-sub-headline').textContent(),'Needs attention');
+ await p.evaluate(()=>{rs.nextgraph.requiresReload=true;rs.emit('error',Error('Local save failed'));});
+ assert.match(await p.locator('.rs-nextgraph-import [role=status]').innerText(),/Reload this app/);
+ assert.equal(await p.locator('.rs-nextgraph-import input').isEnabled(),false);
+ await p.setViewportSize({width:320,height:568});assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
+});
+
+
+test('OneDrive native reconnect failures keep the retry link and show the error',async t=>{
+ const p=await open(t);
+ await p.evaluate(()=>{rs.backend='onedrive';rs.emit('error',{name:'Unauthorized',message:'Reconnect OneDrive'});});
+ assert.equal(await p.locator('.rs-box-error .rs-reconnect').isVisible(),true);
+ await p.evaluate(()=>rs.emit('error',Error('Popup cancelled')));
+ assert.match(await p.locator('.rs-box-error').innerText(),/Popup cancelled/);
+ assert.equal(await p.locator('.rs-box-error .rs-reconnect').isVisible(),true);
+});
