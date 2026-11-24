@@ -311,3 +311,25 @@ test('NextGraph wallet form defaults to nextgraph.net and submits the chosen ser
  assert.ok(field.x >= 0 && field.x + field.width <= 320);
  assert.ok(await p.locator('[name=rs-nextgraph-wallet]').evaluate(el => parseFloat(getComputedStyle(el).fontSize) >= 16));
 });
+
+test('the NextGraph form stays in view after a tall chooser collapses on a scrolled mobile page', async t => {
+ const p = await open(t);
+ await p.setViewportSize({width:390,height:844});
+ await p.evaluate(() => {
+   rs.nextgraph={getWalletURL:()=>'https://nextgraph.net',async connect(){}};
+   widget.destroy();widget.attach('widget');
+   document.querySelector('#widget').style.marginTop='600px';
+   const footer=document.createElement('div');footer.style.height='1500px';document.body.append(footer);
+ });
+ await p.locator('.rs-choose-nextgraph').click();
+ await p.waitForFunction(() => {
+   const bounds=document.querySelector('.rs-nextgraph-form').getBoundingClientRect();
+   return bounds.top>=0 && bounds.bottom<=innerHeight;
+ });
+ assert.equal(await p.locator('[name=rs-nextgraph-wallet]').evaluate(el=>el===document.activeElement),true);
+ await p.locator('[name=rs-nextgraph-wallet]').fill('https://wallet.example.test');
+ await p.locator('.rs-nextgraph-back').click();
+ await p.locator('.rs-choose-nextgraph').click();
+ await p.waitForFunction(() => document.querySelector('.rs-nextgraph-form').getBoundingClientRect().top>=0);
+ assert.equal(await p.locator('[name=rs-nextgraph-wallet]').inputValue(),'https://wallet.example.test');
+});

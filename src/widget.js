@@ -590,7 +590,16 @@ class Widget {
     this.rsChooseNextGraphButton.addEventListener('click', () => {
       this.rsNextGraphError.textContent = '';
       this.setState('nextgraph');
-      this.rsNextGraphForm.elements['rs-nextgraph-wallet'].focus();
+      this.rsNextGraphForm.elements['rs-nextgraph-wallet'].focus({ preventScroll: true });
+      // Collapsing a tall provider chooser moves this form upwards. Wait for
+      // layout transitions before scrolling; focusing during that transition
+      // can otherwise leave the form above the viewport on a long mobile page.
+      const animations = this.rsWidget.getAnimations?.({ subtree: true }) || [];
+      Promise.allSettled(animations.filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished)).then(() => {
+        if (this.state !== 'nextgraph' || !this.rsNextGraphForm.isConnected) return;
+        const bounds = this.rsNextGraphForm.getBoundingClientRect();
+        if (bounds.top < 0 || bounds.bottom > window.innerHeight) this.rsNextGraphForm.scrollIntoView({ block: 'nearest' });
+      });
     });
     this.parentContainerEl.querySelector('.rs-nextgraph-back').addEventListener('click', () => this.showChooseOrSignIn());
     this.rsNextGraphForm.addEventListener('submit', async event => {
