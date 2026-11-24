@@ -1,5 +1,12 @@
 # remotestorage-widget
 
+With the Ponder Source all-backend build of remoteStorage.js, choosing NextGraph
+opens a **Wallet server** form. It defaults to `https://nextgraph.net` and accepts
+another HTTPS wallet origin (or loopback HTTP for development). The adapter uses
+the selected address for both navigation and the wallet MessageChannel. In a new
+wallet iframe storage partition, confirm the prefilled choice again. Changing
+servers after native SDK initialization requires reloading the app.
+
 [![npm](https://img.shields.io/npm/v/remotestorage-widget.svg)](https://www.npmjs.com/package/remotestorage-widget)
 
 A ready-to-use connect/sync widget, as add-on library for

@@ -267,6 +267,8 @@ class Widget {
     this.rsChooseLWSButton = this.parentContainerEl.querySelector('.rs-choose-lws');
     this.rsChooseAtomicButton = this.parentContainerEl.querySelector('.rs-choose-atomic');
     this.rsChooseNextGraphButton = this.parentContainerEl.querySelector('.rs-choose-nextgraph');
+    this.rsNextGraphForm = this.parentContainerEl.querySelector('.rs-nextgraph-form');
+    this.rsNextGraphError = this.rsNextGraphForm.querySelector('[role=alert]');
     this.rsExportButton = this.parentContainerEl.querySelector('.rs-export-guest');
     this.rsImport = this.parentContainerEl.querySelector('.rs-nextgraph-import');
     if (this.guestData?.accept) this.rsImport.querySelector('input').accept = this.guestData.accept;
@@ -584,14 +586,25 @@ class Widget {
       this.rsSignInForm.querySelector('.rs-atomic-help').hidden = false;
       this.setState('sign-in'); this.rsAddressInput.focus();
     });
-    this.rsChooseNextGraphButton.addEventListener('click', async () => {
-      this.rsChooseNextGraphButton.disabled = true; this.rsStorageError.textContent = '';
+    this.rsChooseNextGraphButton.addEventListener('click', () => {
+      this.rsNextGraphForm.elements['rs-nextgraph-wallet'].value = this.rs.nextgraph.getWalletURL?.() || 'https://nextgraph.net';
+      this.rsNextGraphError.textContent = '';
+      this.setState('nextgraph');
+      this.rsNextGraphForm.elements['rs-nextgraph-wallet'].focus();
+    });
+    this.parentContainerEl.querySelector('.rs-nextgraph-back').addEventListener('click', () => this.showChooseOrSignIn());
+    this.rsNextGraphForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const button = this.rsNextGraphForm.querySelector('[type=submit]');
+      button.disabled = true; this.rsNextGraphError.textContent = '';
       try {
+        const wallet = this.rsNextGraphForm.elements['rs-nextgraph-wallet'].value.trim();
+        if (wallet !== 'https://nextgraph.net' && !this.rs.nextgraph.getWalletURL) throw Error('Update remoteStorage.js to select another NextGraph wallet server.');
         if (await this.guestData?.beforeConnect?.() === false) return;
-        await this.rs.nextgraph.connect();
+        await this.rs.nextgraph.connect(wallet);
       }
-      catch (error) { this.rsStorageError.textContent = error.message || String(error); }
-      finally { this.rsChooseNextGraphButton.disabled = false; }
+      catch (error) { this.rsNextGraphError.textContent = error.message || String(error); }
+      finally { button.disabled = false; }
     });
     this.rsExportButton.addEventListener('click', async () => {
       this.rsExportButton.disabled = true; this.rsStorageError.textContent = '';
