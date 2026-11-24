@@ -269,6 +269,7 @@ class Widget {
     this.rsChooseNextGraphButton = this.parentContainerEl.querySelector('.rs-choose-nextgraph');
     this.rsNextGraphForm = this.parentContainerEl.querySelector('.rs-nextgraph-form');
     this.rsNextGraphError = this.rsNextGraphForm.querySelector('[role=alert]');
+    this.rsNextGraphForm.elements['rs-nextgraph-wallet'].value = this.rs.nextgraph?.getWalletURL?.() || 'https://nextgraph.net';
     this.rsExportButton = this.parentContainerEl.querySelector('.rs-export-guest');
     this.rsImport = this.parentContainerEl.querySelector('.rs-nextgraph-import');
     if (this.guestData?.accept) this.rsImport.querySelector('input').accept = this.guestData.accept;
@@ -587,7 +588,6 @@ class Widget {
       this.setState('sign-in'); this.rsAddressInput.focus();
     });
     this.rsChooseNextGraphButton.addEventListener('click', () => {
-      this.rsNextGraphForm.elements['rs-nextgraph-wallet'].value = this.rs.nextgraph.getWalletURL?.() || 'https://nextgraph.net';
       this.rsNextGraphError.textContent = '';
       this.setState('nextgraph');
       this.rsNextGraphForm.elements['rs-nextgraph-wallet'].focus();

@@ -301,7 +301,9 @@ test('NextGraph wallet form defaults to nextgraph.net and submits the chosen ser
  await p.locator('.rs-nextgraph-connect').click();
  assert.deepEqual(await p.evaluate(() => calls), [['wallet','https://wallet.example.test']]);
  await p.locator('.rs-nextgraph-back').click();
- await p.evaluate(() => { rs.nextgraph.getWalletURL = () => 'https://remembered.example.test'; });
+ await p.locator('.rs-choose-nextgraph').click();
+ assert.equal(await p.locator('[name=rs-nextgraph-wallet]').inputValue(),'https://wallet.example.test');
+ await p.evaluate(() => { rs.nextgraph.getWalletURL = () => 'https://remembered.example.test'; widget.destroy(); widget.attach('widget'); });
  await p.locator('.rs-choose-nextgraph').click();
  assert.equal(await p.locator('[name=rs-nextgraph-wallet]').inputValue(),'https://remembered.example.test');
  await p.setViewportSize({width:320,height:568});
