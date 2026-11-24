@@ -4,6 +4,10 @@ const { chromium } = require('playwright');
 let browser;
 before(async () => { browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH }); });
 after(async () => { await browser?.close(); });
+async function connectNextGraph(page) {
+  if (await page.locator('.rs-box-nextgraph').getAttribute('aria-hidden') === 'true') await page.locator('.rs-choose-nextgraph').click();
+  await page.locator('.rs-nextgraph-connect').click();
+}
 async function open(t, options = { solidProviders: { allowAnyProvider: true } }) {
   const page = await browser.newPage(); t.after(() => page.close());
   const errors = []; page.on('pageerror', e => errors.push(e.message));
@@ -157,9 +161,9 @@ test('Atomic uses discovery and consent; Nextgraph uses its native connection an
  await p.locator('[name=rs-user-address]').fill('alice@installation.example.test');await p.locator('.rs-connect').click();
  assert.deepEqual((await p.evaluate(()=>calls))[0],['rs','alice@installation.example.test']);
  await p.evaluate(()=>{widget.showChooseOrSignIn();window.failNG=true;});
- await p.locator('.rs-choose-nextgraph').click();assert.match(await p.locator('.rs-storage-error').innerText(),/Wallet cancelled/);
+ await connectNextGraph(p);assert.match(await p.locator('.rs-nextgraph-error').innerText(),/Wallet cancelled/);
  assert.equal(await p.locator('.rs-choose-nextgraph').isEnabled(),true);
- await p.evaluate(()=>window.failNG=false);await p.locator('.rs-choose-nextgraph').click();
+ await p.evaluate(()=>window.failNG=false);await connectNextGraph(p);
  assert.equal(await p.locator('.rs-nextgraph-import').isVisible(),true);
  await p.evaluate(()=>rs.emit('sync-done',{completed:true}));
  assert.equal(await p.locator('.rs-box-connected .rs-sub-headline').textContent(),'Saved on this device');
@@ -209,7 +213,7 @@ test('app guest handoff exports complete app bytes and imports the original file
  const file = await downloaded;
  assert.equal(file.suggestedFilename(), 'all-projects.zip');
  assert.deepEqual(await require('node:fs/promises').readFile(await file.path()), Buffer.from([80,75,0,255]));
- await p.locator('.rs-choose-nextgraph').click();
+ await connectNextGraph(p);
  const input = p.locator('.rs-nextgraph-import input');
  assert.equal(await input.getAttribute('accept'), '.zip,application/zip');
  await input.setInputFiles({name:'projects.zip',mimeType:'application/zip',buffer:Buffer.from([80,75,0,255])});
@@ -230,19 +234,21 @@ test('guest handoff waits for preflight, cancellation and failure preserve retry
    }});
    widget.attach('widget');
  });
- const button = p.locator('.rs-choose-nextgraph');
+ await p.locator('.rs-choose-nextgraph').click();
+ const button = p.locator('.rs-nextgraph-connect');
  await button.click();
  assert.equal(await button.isDisabled(), true);
  assert.deepEqual(await p.evaluate(() => calls), []);
  await p.evaluate(() => finishPreflight(false));
- await p.waitForFunction(() => !document.querySelector('.rs-choose-nextgraph').disabled);
+ await p.waitForFunction(() => !document.querySelector('.rs-nextgraph-connect').disabled);
  assert.deepEqual(await p.evaluate(() => calls), []);
  await button.click();
  await p.evaluate(() => failPreflight(Error('Save your guest backup first')));
- await p.waitForFunction(() => !document.querySelector('.rs-choose-nextgraph').disabled);
- assert.match(await p.locator('.rs-storage-error').innerText(), /Save your guest backup first/);
+ await p.waitForFunction(() => !document.querySelector('.rs-nextgraph-connect').disabled);
+ assert.match(await p.locator('.rs-nextgraph-error').innerText(), /Save your guest backup first/);
  await button.click(); await p.evaluate(() => finishPreflight());
  await p.waitForFunction(() => calls.length === 1);
+ await p.locator('.rs-nextgraph-back').click();
  await p.locator('.rs-export-guest').click();
  assert.match(await p.locator('.rs-storage-error').innerText(), /Guest database unavailable/);
  assert.equal(await p.locator('.rs-export-guest').isEnabled(), true);
@@ -266,7 +272,7 @@ test('app import owns size validation and reports persistence failures without s
    }});
    widget.attach('widget');
  });
- await p.locator('.rs-choose-nextgraph').click();
+ await connectNextGraph(p);
  await p.evaluate(() => {
    const transfer=new DataTransfer();
    transfer.items.add(new File([new Uint8Array(50*1024*1024+1)],'large.zip'));
@@ -280,4 +286,26 @@ test('app import owns size validation and reports persistence failures without s
  await p.waitForFunction(() => document.querySelector('.rs-nextgraph-import [role=status]').textContent === 'Local transaction aborted');
  assert.equal(await p.locator('.rs-nextgraph-import input').isEnabled(), true);
  assert.equal(await p.locator('.rs-nextgraph-import input').inputValue(), '');
+});
+
+test('NextGraph wallet form defaults to nextgraph.net and submits the chosen server only after consent', async t => {
+ const p = await open(t);
+ await p.evaluate(() => {
+   rs.nextgraph = {getWalletURL: () => 'https://nextgraph.net', async connect(url) { calls.push(['wallet',url]); }};
+   widget.destroy(); widget.attach('widget');
+ });
+ await p.locator('.rs-choose-nextgraph').click();
+ assert.deepEqual(await p.evaluate(() => calls), []);
+ assert.equal(await p.locator('[name=rs-nextgraph-wallet]').inputValue(),'https://nextgraph.net');
+ await p.locator('[name=rs-nextgraph-wallet]').fill('https://wallet.example.test');
+ await p.locator('.rs-nextgraph-connect').click();
+ assert.deepEqual(await p.evaluate(() => calls), [['wallet','https://wallet.example.test']]);
+ await p.locator('.rs-nextgraph-back').click();
+ await p.evaluate(() => { rs.nextgraph.getWalletURL = () => 'https://remembered.example.test'; });
+ await p.locator('.rs-choose-nextgraph').click();
+ assert.equal(await p.locator('[name=rs-nextgraph-wallet]').inputValue(),'https://remembered.example.test');
+ await p.setViewportSize({width:320,height:568});
+ const field = await p.locator('[name=rs-nextgraph-wallet]').boundingBox();
+ assert.ok(field.x >= 0 && field.x + field.width <= 320);
+ assert.ok(await p.locator('[name=rs-nextgraph-wallet]').evaluate(el => parseFloat(getComputedStyle(el).fontSize) >= 16));
 });
