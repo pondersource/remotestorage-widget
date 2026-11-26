@@ -12,6 +12,15 @@ servers after native SDK initialization requires reloading the app.
 A ready-to-use connect/sync widget, as add-on library for
 [remoteStorage.js](https://github.com/remotestorage/remotestorage.js/).
 
+## Provider icons
+
+The chooser uses the [AtomicServer mark](https://github.com/ontola/atomic-server/blob/develop/logo-square.svg),
+the [NextGraph mark](https://github.com/nextgraph-org/nextgraph-rs/blob/main/app/ui-common/src/assets/nextgraph.svg),
+and the [Microsoft OneDrive mark](https://github.com/gilbarbara/logos/blob/main/logos/microsoft-onedrive.svg).
+The linked-storage icon for LWS is a widget illustration. The
+[W3C Linked Web Storage Working Group](https://www.w3.org/groups/wg/lws/)
+does not publish a project mark on its group page.
+
 ## Usage
 
 ```js

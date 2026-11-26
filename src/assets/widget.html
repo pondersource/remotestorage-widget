@@ -18,9 +18,47 @@
 <!-- RS WIDGET, a class named rs-state-<state> indicates its current state -->
 <div class="rs-widget rs-state-initial">
 
+  <svg class="rs-provider-symbols" xmlns="http://www.w3.org/2000/svg" width="0" height="0" aria-hidden="true" focusable="false">
+    <symbol id="rs-provider-lws" viewBox="0 0 40 40" fill="none">
+      <g stroke="#226c71" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="14" cy="10" rx="9" ry="4" />
+        <path d="M5 10v15c0 2.2 4 4 9 4 2 0 4-.3 5.5-.8M5 18c0 2.2 4 4 9 4m9-12v5m-2 8 8-5m-8 5 8 5" />
+        <circle cx="19" cy="24" r="2.5" fill="#fff" />
+        <circle cx="32" cy="16" r="3" fill="#fff" />
+        <circle cx="32" cy="30" r="3" fill="#fff" />
+      </g>
+    </symbol>
+    <symbol id="rs-provider-onedrive" viewBox="0 0 256 165">
+      <g>
+          <path d="M154.66056,110.681557 L207.502052,60.1479482 C196.525811,17.3487078 152.932256,-8.44908883 110.132767,2.52715287 C90.8589801,7.46999082 74.1187452,19.4179992 63.179535,36.0386895 C63.9974594,36.0180612 154.66056,110.681557 154.66056,110.681557 Z" fill="#0364B8" />
+          <path d="M97.6181022,45.5520619 L97.6156169,45.5607606 C87.5186874,39.307156 75.8741386,36.001658 63.9972108,36.0177537 C63.7228296,36.0177537 63.4531706,36.03521 63.1792865,36.0384409 C27.8517142,36.4761088 -0.432413365,65.4695515 0.00500592252,100.797124 C0.163570414,113.612018 4.16769663,126.083687 11.4981977,136.595916 L90.6631356,126.680913 L151.357298,77.7409022 L97.6181022,45.5520619 Z" fill="#0078D4" />
+          <path d="M207.502052,60.1481967 C206.340406,60.0706542 205.173043,60.016946 203.992011,60.016946 C196.903085,60.010012 189.887973,61.4579693 183.381112,64.271122 L183.379621,64.2656543 L151.357547,77.7411507 L186.65952,121.347877 L249.770673,136.689364 C263.390071,111.405536 253.93411,79.8683506 228.650281,66.2489531 C222.117076,62.7297161 214.906119,60.6497377 207.502301,60.1484453 L207.502301,60.1481967 L207.502052,60.1481967 Z" fill="#1490DF" />
+          <path d="M11.4981977,136.595916 C23.4514253,153.781772 43.063467,164.023845 63.9974594,164.012918 L203.991762,164.012918 C223.115435,164.018377 240.697951,153.524291 249.770425,136.689862 L151.357298,77.7409022 L11.4981977,136.595916 Z" fill="#28A8EA" />
+        </g>
+    </symbol>
+    <symbol id="rs-provider-atomic" viewBox="0 0 100 100" fill="none">
+      <path d="M74 52 A 24 24 0 1 1 50 28" stroke="white" stroke-width="24" stroke-linecap="round" />
+      <circle cx="50" cy="28" r="17" fill="white" />
+      <path d="M74 52 A 24 24 0 1 1 50 28" stroke="black" stroke-width="14" stroke-linecap="round" />
+      <circle cx="50" cy="28" r="12" fill="url(#rs-provider-atomic-orb)" />
+      <defs>
+          <linearGradient id="rs-provider-atomic-orb" x1="62" y1="28" x2="38" y2="28" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#01ECFF" />
+            <stop offset="1" stop-color="#2210FF" />
+          </linearGradient>
+        </defs>
+    </symbol>
+    <symbol id="rs-provider-nextgraph" viewBox="0 0 225 225">
+      <g>
+          <circle r="106.98013" cy="112.90476" cx="109.88096" fill="#ffffff" stroke="none" stroke-width="0.268375" />
+          <path d="M 98.343352,190.26108 C 80.403778,187.53354 65.011938,179.57839 52.608228,166.62327 38.602093,151.99448 31.178059,133.41381 31.178059,112.98841 c 0,-10.21889 1.700058,-19.44396 5.221234,-28.332119 4.28678,-10.820699 10.037295,-19.39063 18.535095,-27.62263 4.72982,-4.58187 6.60687,-6.10643 11.28099,-9.16256 11.89869,-7.779841 24.173884,-11.879991 38.095802,-12.724761 19.80437,-1.2017 39.11165,5.11306 54.60284,17.858751 1.50718,1.24006 2.72951,2.35934 2.71628,2.48729 -0.0132,0.12795 -3.85821,3.63443 -8.54442,7.79217 -4.6862,4.157729 -10.04724,8.96276 -11.91342,10.677819 -1.86617,1.715071 -3.54094,3.11831 -3.7217,3.11831 -0.18075,0 -1.39985,-0.745188 -2.70911,-1.655969 -7.53011,-5.23834 -15.99428,-7.82188 -25.62597,-7.82188 -12.731628,0 -23.249192,4.3379 -32.143882,13.257541 -6.39594,6.413868 -10.70387,14.555268 -12.50018,23.623578 -0.69099,3.48832 -0.68968,13.53072 0.002,17.00893 3.70508,18.62577 18.31886,33.10194 36.642322,36.29729 4.16439,0.72621 11.98099,0.71223 15.98975,-0.0286 14.03187,-2.59311 25.86047,-11.36806 32.26533,-23.93578 0.77379,-1.51834 1.26018,-2.88461 1.08086,-3.03616 -0.17934,-0.15156 -6.87448,-1.1779 -14.87813,-2.28078 -9.7795,-1.34758 -14.92353,-2.21379 -15.68471,-2.64117 -1.52067,-0.85379 -2.83611,-2.88806 -2.83611,-4.3859 0,-1.1732 2.02687,-15.86876 2.49085,-18.05962 0.29676,-1.40127 2.42559,-3.4934 3.84317,-3.77691 0.62227,-0.12445 8.82712,0.85555 18.28065,2.18348 9.43343,1.32511 17.26269,2.29453 17.39833,2.15427 0.13566,-0.14026 1.11808,-6.54833 2.18313,-14.24014 1.10778,-8.000208 2.20407,-14.60184 2.56177,-15.426229 0.34392,-0.792599 1.11019,-1.849131 1.70287,-2.34782 2.06321,-1.736079 3.1433,-1.785011 12.20439,-0.55291 9.63637,1.310309 10.70873,1.56224 12.28077,2.88503 1.64359,1.382979 2.2732,2.810909 2.25906,5.123309 -0.007,1.10173 -0.92172,8.29645 -2.03332,15.98826 -1.11158,7.69182 -1.97159,14.04091 -1.91113,14.1091 0.0605,0.0682 7.16644,1.11143 15.79109,2.31832 11.10566,1.55407 16.00827,2.38757 16.80223,2.85657 1.53015,0.90389 2.48023,2.64785 2.45017,4.49756 -0.0462,2.84349 -2.41252,18.12279 -2.97521,19.21089 -0.66164,1.27949 -2.60244,2.54696 -3.92109,2.56074 -0.51973,0.005 -7.87449,-0.95937 -16.34391,-2.144 -8.46944,-1.18464 -15.47588,-2.077 -15.56986,-1.98301 -0.094,0.094 -1.18792,7.34163 -2.43097,16.10589 -1.44004,10.15311 -2.49792,16.43621 -2.91556,17.31631 -0.72531,1.52848 -2.76261,3.06291 -4.53817,3.41802 -0.95688,0.19138 -10.90014,-0.92798 -13.59859,-1.53084 -0.5471,-0.12223 -1.89146,0.67252 -4.50941,2.66588 -11.2627,8.57562 -24.34195,13.90917 -38.35741,15.64164 -4.40038,0.54395 -15.72658,0.43298 -19.853658,-0.19451 z" fill="#4972a5" fill-opacity="1" stroke="#4972a5" stroke-width="0.377976" stroke-opacity="1" />
+        </g>
+    </symbol>
+  </svg>
   <div class="rs-widget-icon">
-    <span class="rs-main-logo rs-lws-mark" aria-label="LWS storage">LWS</span>
-    <span class="rs-main-logo rs-onedrive-mark" aria-label="OneDrive storage">OD</span>
+    <svg class="rs-main-logo rs-provider-main-logo rs-lws-mark" role="img" aria-label="LWS storage" focusable="false"><use href="#rs-provider-lws"></use></svg>
+    <svg class="rs-main-logo rs-provider-main-logo rs-onedrive-mark" role="img" aria-label="OneDrive storage" focusable="false"><use href="#rs-provider-onedrive"></use></svg>
+    <svg class="rs-main-logo rs-provider-main-logo rs-nextgraph-mark" role="img" aria-label="NextGraph storage" focusable="false"><use href="#rs-provider-nextgraph"></use></svg>
     <svg class="rs-main-logo" id="rs-main-logo-remotestorage" xmlns="http://www.w3.org/2000/svg" version="1.1"
          xml:space="preserve" width="0.739008in" height="0.853339in"
          style="shape-rendering:geometricPrecision; text-rendering:geometricPrecision; image-rendering:optimizeQuality; fill-rule:evenodd; clip-rule:evenodd"
@@ -486,10 +524,22 @@
           </svg>
           <div>Google Drive</div>
         </button>
-        <button class="rs-button rs-button-big rs-choose-lws" type="button"><div>LWS</div></button>
-        <button class="rs-button rs-button-big rs-choose-onedrive" type="button"><div>OneDrive</div></button>
-        <button class="rs-button rs-button-big rs-choose-atomic" type="button"><div>AtomicServer</div></button>
-        <button class="rs-button rs-button-big rs-choose-nextgraph" type="button"><div>Nextgraph</div></button>
+        <button class="rs-button rs-button-big rs-choose-lws" type="button">
+          <svg aria-hidden="true" focusable="false"><use href="#rs-provider-lws"></use></svg>
+          <div>LWS</div>
+        </button>
+        <button class="rs-button rs-button-big rs-choose-onedrive" type="button">
+          <svg aria-hidden="true" focusable="false"><use href="#rs-provider-onedrive"></use></svg>
+          <div>OneDrive</div>
+        </button>
+        <button class="rs-button rs-button-big rs-choose-atomic" type="button">
+          <svg aria-hidden="true" focusable="false"><use href="#rs-provider-atomic"></use></svg>
+          <div>AtomicServer</div>
+        </button>
+        <button class="rs-button rs-button-big rs-choose-nextgraph" type="button">
+          <svg aria-hidden="true" focusable="false"><use href="#rs-provider-nextgraph"></use></svg>
+          <div>Nextgraph</div>
+        </button>
         <button class="rs-button rs-export-guest" type="button">Export guest data for Nextgraph</button>
         <p class="rs-storage-error" role="alert"></p>
         <button class="rs-button rs-button-big rs-choose-solid">
