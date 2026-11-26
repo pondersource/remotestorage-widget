@@ -38,6 +38,38 @@ async function open(t, options = { solidProviders: { allowAnyProvider: true } })
   }, options);
   return page;
 }
+test('extra providers display chooser icons and native connection badges', async t => {
+  const page = await open(t);
+  await page.evaluate(() => {
+    rs.apiKeys.onedrive = {clientId: 'test'};
+    rs.onedrive = {};
+    rs.lws = {};
+    rs.nextgraph = {deliveryState: 'local'};
+    rs.constructor = {AtomicPlugin: true};
+    widget.destroy();
+    widget.attach('widget');
+  });
+
+  for (const provider of ['lws', 'onedrive', 'atomic', 'nextgraph']) {
+    const icon = page.locator(`.rs-choose-${provider} svg`);
+    assert.equal(await icon.getAttribute('aria-hidden'), 'true');
+    assert.equal(await icon.locator('use').getAttribute('href'), '#rs-provider-' + provider);
+    assert.ok(await icon.evaluate(svg => svg.getBBox().width > 0), provider + ' chooser icon renders');
+  }
+
+  for (const provider of ['lws', 'onedrive', 'nextgraph']) {
+    await page.evaluate(backend => {
+      rs.backend = backend;
+      rs.connected = true;
+      rs.emit('connected');
+    }, provider);
+    assert.equal(await page.locator('.rs-main-logo:visible').count(), 1);
+    const badge = page.locator(`.rs-main-logo.rs-${provider}-mark`);
+    assert.ok(await badge.isVisible());
+    assert.ok(await badge.evaluate(svg => svg.getBBox().width > 0), provider + ' connected badge renders');
+  }
+});
+
 test('four backends, login validation, async failure and retry', async t => {
  const p=await open(t);
  for (const backend of ['dropbox','googledrive']) await p.locator('.rs-choose-'+backend).click();

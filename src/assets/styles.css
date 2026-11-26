@@ -440,9 +440,11 @@ polygon.rs-logo-shape,
 
 /* Extra backends share the provider chooser and connected/sync controls. */
 .rs-state-choose .rs-box.rs-selected:not([aria-hidden=true]) { max-height: min(80vh, 700px); overflow-y: auto; }
-.rs-lws-mark, .rs-onedrive-mark { display: none; }
+.rs-provider-symbols { position: absolute; }
+.rs-provider-main-logo { display: none; }
 .rs-widget.rs-backend-lws .rs-lws-mark,
-.rs-widget.rs-backend-onedrive .rs-onedrive-mark { display: block; font: bold 20px system-ui; }
+.rs-widget.rs-backend-onedrive .rs-onedrive-mark,
+.rs-widget.rs-backend-nextgraph .rs-nextgraph-mark { display: block; }
 .rs-lws-form input[type=url], .rs-nextgraph-form input[type=url] { padding: 15px 10px; display: block; width: 100%; box-sizing: border-box; font: inherit; font-size: 1rem; }
 
 .rs-nextgraph-import { padding: 12px; max-width: 280px; font-size: 14px; }
