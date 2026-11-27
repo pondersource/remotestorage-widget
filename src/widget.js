@@ -2,6 +2,8 @@ import widgetHtml from './assets/widget.html';
 import widgetCss from './assets/styles.css';
 import circleOpenSvg from './assets/circle-open.svg';
 
+const ATOMIC_SERVER = 'https://atomic.place';
+
 /**
  * RemoteStorage connect widget
  * @constructor
@@ -266,6 +268,12 @@ class Widget {
     this.rsSolid = this.parentContainerEl.querySelector('.rs-box-solid');
     this.rsChooseLWSButton = this.parentContainerEl.querySelector('.rs-choose-lws');
     this.rsChooseAtomicButton = this.parentContainerEl.querySelector('.rs-choose-atomic');
+    this.rsAtomicForm = this.parentContainerEl.querySelector('.rs-atomic-form');
+    this.rsAtomicServer = this.rsAtomicForm.elements['rs-atomic-server'];
+    this.rsAtomicServer.value = ATOMIC_SERVER;
+    this.rsAtomicApprove = this.rsAtomicForm.querySelector('.rs-atomic-approve');
+    this.rsAtomicStatus = this.rsAtomicForm.querySelector('[role=status]');
+    this.rsAtomicError = this.rsAtomicForm.querySelector('[role=alert]');
     this.rsChooseNextGraphButton = this.parentContainerEl.querySelector('.rs-choose-nextgraph');
     this.rsNextGraphForm = this.parentContainerEl.querySelector('.rs-nextgraph-form');
     this.rsNextGraphError = this.rsNextGraphForm.querySelector('[role=alert]');
@@ -273,7 +281,7 @@ class Widget {
     this.rsExportButton = this.parentContainerEl.querySelector('.rs-export-guest');
     this.rsImport = this.parentContainerEl.querySelector('.rs-nextgraph-import');
     if (this.guestData?.accept) this.rsImport.querySelector('input').accept = this.guestData.accept;
-    this.rsChooseAtomicButton.hidden = !this.rs.constructor.AtomicPlugin;
+    this.rsChooseAtomicButton.hidden = !this.rs.atomic?.requestAppKey;
     this.rsChooseNextGraphButton.hidden = !this.rs.nextgraph;
     this.rsExportButton.hidden = !this.rs.nextgraph;
     this.rsImport.hidden = true;
@@ -340,6 +348,7 @@ class Widget {
   }
 
   destroy () {
+    this.atomicRequest?.abort();
     this.destroyed = true;
     for (const [name, handler] of this.subscriptions) {
       this.rs.removeEventListener(name, handler);
@@ -356,6 +365,13 @@ class Widget {
       this.listen('pod-not-selected', () => this.eventHandler('pod-not-selected'));
       this.listen('features-loaded', () => this.restorePodSelection());
     }
+    this.listen('features-loaded', () => {
+      const wasHidden = this.rsChooseAtomicButton.hidden;
+      this.rsChooseAtomicButton.hidden = !this.rs.atomic?.requestAppKey;
+      if (wasHidden && !this.rsChooseAtomicButton.hidden && !this.active && this.skipInitial && this.state === 'sign-in') {
+        this.showChooseOrSignIn();
+      }
+    });
     this.listen('connected', () => this.eventHandler('connected'));
     this.listen('ready', () => this.eventHandler('ready'));
     this.listen('disconnected', () => this.eventHandler('disconnected'));
@@ -409,6 +425,42 @@ class Widget {
     this.setupHandlers();
     this.restorePodSelection();
     this.resumeLWS();
+  }
+
+  async requestAtomicAccess () {
+    this.atomicRequest?.abort();
+    const request = new AbortController();
+    this.atomicRequest = request;
+    this.rsAtomicApprove.hidden = true;
+    this.rsAtomicStatus.textContent = '';
+    this.rsAtomicError.textContent = '';
+
+    try {
+      const server = new URL(this.rsAtomicServer.value);
+      const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(server.hostname);
+      if ((server.protocol !== 'https:' && !(loopback && server.protocol === 'http:')) ||
+          server.username || server.password || server.pathname !== '/' || server.search || server.hash) {
+        throw new Error('Enter an HTTPS Atomic server URL, or a local HTTP server for development.');
+      }
+
+      const { publicKey, waitForGrant } = await this.rs.atomic.requestAppKey(server.origin, { signal: request.signal });
+      if (request.signal.aborted) return;
+      const approval = new URL('/app/connect-agent', server.origin === ATOMIC_SERVER ? 'https://app.atomic.place' : server.origin);
+      approval.searchParams.set('key', publicKey);
+      approval.searchParams.set('name', window.location.host || document.title);
+      approval.searchParams.set('write', '1');
+      this.rsAtomicApprove.href = approval.href;
+      this.rsAtomicApprove.hidden = false;
+      this.rsAtomicStatus.textContent = 'Open Atomic to approve this app. Then return here.';
+      await waitForGrant();
+    } catch (error) {
+      if (request.signal.aborted) return;
+      this.rsAtomicApprove.hidden = true;
+      this.rsAtomicStatus.textContent = '';
+      this.rsAtomicError.textContent = error.message || String(error);
+    } finally {
+      if (this.atomicRequest === request) this.atomicRequest = undefined;
+    }
   }
 
   async resumeLWS () {
@@ -571,7 +623,7 @@ class Widget {
     }
     // choose backend only if some providers are declared
     if ((this.rs.apiKeys && Object.keys(this.rs.apiKeys).length > 0) ||
-    this.solidEnabled || this.rs.lws || this.rs.onedrive || this.rs.nextgraph || this.rs.constructor.AtomicPlugin) {
+    this.solidEnabled || this.rs.lws || this.rs.onedrive || this.rs.nextgraph || this.rs.atomic?.requestAppKey) {
       this.setState('choose');
     } else {
       this.setState('sign-in');
@@ -583,9 +635,19 @@ class Widget {
     this.rsInitial.addEventListener('click', () => this.showChooseOrSignIn() );
 
     this.rsChooseAtomicButton.addEventListener('click', () => {
-      this.rsSignInForm.querySelector('h1').textContent = 'Connect AtomicServer';
-      this.rsSignInForm.querySelector('.rs-atomic-help').hidden = false;
-      this.setState('sign-in'); this.rsAddressInput.focus();
+      this.setState('atomic');
+      this.rsAtomicServer.focus();
+    });
+    this.rsAtomicForm.addEventListener('submit', event => {
+      event.preventDefault();
+      void this.requestAtomicAccess();
+    });
+    this.rsAtomicForm.querySelector('.rs-atomic-back').addEventListener('click', () => {
+      this.atomicRequest?.abort();
+      this.rsAtomicApprove.hidden = true;
+      this.rsAtomicStatus.textContent = '';
+      this.rsAtomicError.textContent = '';
+      this.showChooseOrSignIn();
     });
     this.rsChooseNextGraphButton.addEventListener('click', () => {
       this.rsNextGraphError.textContent = '';
@@ -657,8 +719,6 @@ class Widget {
 
     // Choose RS button
     this.rsChooseRemoteStorageButton.addEventListener('click', () => {
-      this.rsSignInForm.querySelector('h1').textContent = 'Connect your storage';
-      this.rsSignInForm.querySelector('.rs-atomic-help').hidden = true;
       this.setState('sign-in');
       this.rsAddressInput.focus();
     });

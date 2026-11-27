@@ -21,6 +21,17 @@ The linked-storage icon for LWS is a widget illustration. The
 [W3C Linked Web Storage Working Group](https://www.w3.org/groups/wg/lws/)
 does not publish a project mark on its group page.
 
+## Atomic connection
+
+The Atomic chooser is enabled when the app's storage adapter supplies
+`rs.atomic.requestAppKey(serverOrigin, { signal })`. The adapter generates
+an app-owned signing key and returns its `publicKey` and a `waitForGrant()`
+function. The widget opens Atomic's consent page with the public key.
+The adapter must verify the grant for that key, start native storage using
+it, and emit the normal connected event. It must stop its pending authorization
+when the signal is aborted. See
+[Atomic's app-key protocol](https://github.com/ontola/atomic-server/blob/develop/browser/lib/src/agent-grants.ts).
+
 ## Usage
 
 ```js
