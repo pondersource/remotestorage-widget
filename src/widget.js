@@ -924,7 +924,7 @@ class Widget {
     this.rsWidget.classList.remove('rs-backend-remotestorage');
     this.rsWidget.classList.remove('rs-backend-dropbox');
     this.rsWidget.classList.remove('rs-backend-googledrive');
-    this.rsWidget.classList.remove('rs-backend-solid', 'rs-backend-lws', 'rs-backend-onedrive', 'rs-backend-nextgraph');
+    this.rsWidget.classList.remove('rs-backend-solid', 'rs-backend-lws', 'rs-backend-onedrive', 'rs-backend-nextgraph', 'rs-backend-atomic');
 
     if (backend) {
       this.rsWidget.classList.add(`rs-backend-${backend}`);
