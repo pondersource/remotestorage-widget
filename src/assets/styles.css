@@ -447,7 +447,7 @@ polygon.rs-logo-shape,
 .rs-widget.rs-backend-onedrive .rs-onedrive-mark,
 .rs-widget.rs-backend-atomic .rs-atomic-mark,
 .rs-widget.rs-backend-nextgraph .rs-nextgraph-mark { display: block; }
-.rs-lws-form input[type=url], .rs-atomic-form input[type=url], .rs-nextgraph-form input[type=url] { padding: 15px 10px; display: block; width: 100%; box-sizing: border-box; font: inherit; font-size: 1rem; }
+.rs-lws-form input[type=url], .rs-atomic-form input, .rs-nextgraph-form input[type=url] { padding: 15px 10px; display: block; width: 100%; box-sizing: border-box; font: inherit; font-size: 1rem; }
 
 .rs-nextgraph-import { padding: 12px; max-width: 280px; font-size: 14px; }
 .rs-nextgraph-import input { display: block; width: 100%; margin-top: 8px; font-size: 1rem; }

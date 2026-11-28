@@ -271,6 +271,7 @@ class Widget {
     this.rsAtomicForm = this.parentContainerEl.querySelector('.rs-atomic-form');
     this.rsAtomicServer = this.rsAtomicForm.elements['rs-atomic-server'];
     this.rsAtomicServer.value = ATOMIC_SERVER;
+    this.rsAtomicDrive = this.rsAtomicForm.elements['rs-atomic-drive'];
     this.rsAtomicApprove = this.rsAtomicForm.querySelector('.rs-atomic-approve');
     this.rsAtomicStatus = this.rsAtomicForm.querySelector('[role=status]');
     this.rsAtomicError = this.rsAtomicForm.querySelector('[role=alert]');
@@ -443,13 +444,11 @@ class Widget {
         throw new Error('Enter an HTTPS Atomic server URL, or a local HTTP server for development.');
       }
 
-      const { publicKey, waitForGrant } = await this.rs.atomic.requestAppKey(server.origin, { signal: request.signal });
+      const { grantUrl, waitForGrant } = await this.rs.atomic.requestAppKey(server.origin, {
+        drive: this.rsAtomicDrive.value, signal: request.signal
+      });
       if (request.signal.aborted) return;
-      const approval = new URL('/app/connect-agent', server.origin === ATOMIC_SERVER ? 'https://app.atomic.place' : server.origin);
-      approval.searchParams.set('key', publicKey);
-      approval.searchParams.set('name', window.location.host || document.title);
-      approval.searchParams.set('write', '1');
-      this.rsAtomicApprove.href = approval.href;
+      this.rsAtomicApprove.href = grantUrl;
       this.rsAtomicApprove.hidden = false;
       this.rsAtomicStatus.textContent = 'Open Atomic to approve this app. Then return here.';
       await waitForGrant();

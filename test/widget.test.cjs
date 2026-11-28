@@ -190,10 +190,12 @@ test('Atomic requests a revocable app key for the chosen server', async t => {
   assert.equal(await page.getByRole('button', { name: 'Atomic', exact: true }).isVisible(), false);
   await page.evaluate(() => {
     rs.atomic = {
-      async requestAppKey(server, { signal }) {
-        calls.push(['atomic-key', server]);
+      async requestAppKey(server, { drive, signal }) {
+        calls.push(['atomic-key', server, drive]);
         signal.addEventListener('abort', () => calls.push(['atomic-cancel']), { once: true });
-        return { publicKey: 'base64-app-public-key', waitForGrant: () => new Promise(resolve => {
+        const grantUrl = new URL('/app/connect-agent', server === 'https://atomic.place' ? 'https://app.atomic.place' : server);
+        grantUrl.search = new URLSearchParams({ key: 'base64-app-public-key', name: 'Test', write: '1', target: drive });
+        return { grantUrl: grantUrl.href, waitForGrant: () => new Promise(resolve => {
           signal.addEventListener('abort', resolve, { once: true });
         }) };
       }
@@ -203,6 +205,8 @@ test('Atomic requests a revocable app key for the chosen server', async t => {
   await page.getByRole('button', { name: 'Atomic', exact: true }).click();
   const server = page.getByRole('textbox', { name: 'Atomic server URL' });
   assert.equal(await server.inputValue(), 'https://atomic.place');
+  const drive = 'atomic:' + 'a'.repeat(86);
+  await page.getByRole('textbox', { name: 'Atomic drive DID or link' }).fill(drive);
   await page.getByRole('button', { name: 'Create app key' }).click();
   const approve = page.getByRole('link', { name: 'Open Atomic to approve' });
   await approve.waitFor();
@@ -211,6 +215,7 @@ test('Atomic requests a revocable app key for the chosen server', async t => {
   assert.equal(hosted.pathname, '/app/connect-agent');
   assert.equal(hosted.searchParams.get('key'), 'base64-app-public-key');
   assert.equal(hosted.searchParams.get('write'), '1');
+  assert.equal(hosted.searchParams.get('target'), drive);
 
   await page.getByRole('button', { name: 'Other storage' }).click();
   await page.getByRole('button', { name: 'Atomic', exact: true }).click();
@@ -219,7 +224,7 @@ test('Atomic requests a revocable app key for the chosen server', async t => {
   await approve.waitFor();
   assert.equal(new URL(await approve.getAttribute('href')).origin, 'https://your-node.example');
   assert.deepEqual(await page.evaluate(() => calls), [
-    ['atomic-key', 'https://atomic.place'], ['atomic-cancel'], ['atomic-key', 'https://your-node.example']
+    ['atomic-key', 'https://atomic.place', drive], ['atomic-cancel'], ['atomic-key', 'https://your-node.example', drive]
   ]);
 });
 
