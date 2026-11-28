@@ -45,7 +45,7 @@ test('extra providers display chooser icons and native connection badges', async
     rs.onedrive = {};
     rs.lws = {};
     rs.nextgraph = {deliveryState: 'local'};
-    rs.constructor = {AtomicPlugin: true};
+    rs.atomic = { requestAppKey() {} };
     widget.destroy();
     widget.attach('widget');
   });
@@ -57,7 +57,7 @@ test('extra providers display chooser icons and native connection badges', async
     assert.ok(await icon.evaluate(svg => svg.getBBox().width > 0), provider + ' chooser icon renders');
   }
 
-  for (const provider of ['lws', 'onedrive', 'nextgraph']) {
+  for (const provider of ['lws', 'onedrive', 'atomic', 'nextgraph']) {
     await page.evaluate(backend => {
       rs.backend = backend;
       rs.connected = true;
@@ -180,18 +180,61 @@ test('OneDrive popup errors remain recoverable in the provider chooser',async t=
  assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
 });
 
-test('Atomic uses discovery and consent; Nextgraph uses its native connection and explicit import',async t=>{
+test('Atomic requests a revocable app key for the chosen server', async t => {
+  const page = await open(t);
+  await page.evaluate(() => {
+    rs.constructor = { AtomicPlugin: true };
+    widget.destroy();
+    widget.attach('widget');
+  });
+  assert.equal(await page.getByRole('button', { name: 'Atomic', exact: true }).isVisible(), false);
+  await page.evaluate(() => {
+    rs.atomic = {
+      async requestAppKey(server, { drive, signal }) {
+        calls.push(['atomic-key', server, drive]);
+        signal.addEventListener('abort', () => calls.push(['atomic-cancel']), { once: true });
+        const grantUrl = new URL('/app/connect-agent', server === 'https://atomic.place' ? 'https://app.atomic.place' : server);
+        grantUrl.search = new URLSearchParams({ key: 'base64-app-public-key', name: 'Test', write: '1', target: drive });
+        return { grantUrl: grantUrl.href, waitForGrant: () => new Promise(resolve => {
+          signal.addEventListener('abort', resolve, { once: true });
+        }) };
+      }
+    };
+    rs.emit('features-loaded');
+  });
+  await page.getByRole('button', { name: 'Atomic', exact: true }).click();
+  const server = page.getByRole('textbox', { name: 'Atomic server URL' });
+  assert.equal(await server.inputValue(), 'https://atomic.place');
+  const drive = 'atomic:' + 'a'.repeat(86);
+  await page.getByRole('textbox', { name: 'Atomic drive DID or link' }).fill(drive);
+  await page.getByRole('button', { name: 'Create app key' }).click();
+  const approve = page.getByRole('link', { name: 'Open Atomic to approve' });
+  await approve.waitFor();
+  const hosted = new URL(await approve.getAttribute('href'));
+  assert.equal(hosted.origin, 'https://app.atomic.place');
+  assert.equal(hosted.pathname, '/app/connect-agent');
+  assert.equal(hosted.searchParams.get('key'), 'base64-app-public-key');
+  assert.equal(hosted.searchParams.get('write'), '1');
+  assert.equal(hosted.searchParams.get('target'), drive);
+
+  await page.getByRole('button', { name: 'Other storage' }).click();
+  await page.getByRole('button', { name: 'Atomic', exact: true }).click();
+  await server.fill('https://your-node.example');
+  await page.getByRole('button', { name: 'Create app key' }).click();
+  await approve.waitFor();
+  assert.equal(new URL(await approve.getAttribute('href')).origin, 'https://your-node.example');
+  assert.deepEqual(await page.evaluate(() => calls), [
+    ['atomic-key', 'https://atomic.place', drive], ['atomic-cancel'], ['atomic-key', 'https://your-node.example', drive]
+  ]);
+});
+
+test('Nextgraph uses its native connection and explicit import',async t=>{
  const p=await open(t);
  await p.evaluate(()=>{
-   rs.constructor={AtomicPlugin:true};
    rs.nextgraph={deliveryState:'local',async connect(){if(window.failNG)throw Error('Wallet cancelled');calls.push(['nextgraph']);rs.backend='nextgraph';rs.connected=true;rs.emit('connected');},
      async importSnapshot(data){calls.push(['import',data.version]);return data.records.map(r=>({path:r.path,statusCode:201}));}};
    widget.destroy();widget.attach('widget');
  });
- await p.locator('.rs-choose-atomic').click();
- assert.match(await p.locator('.rs-atomic-help').innerText(),/installation/);
- await p.locator('[name=rs-user-address]').fill('alice@installation.example.test');await p.locator('.rs-connect').click();
- assert.deepEqual((await p.evaluate(()=>calls))[0],['rs','alice@installation.example.test']);
  await p.evaluate(()=>{widget.showChooseOrSignIn();window.failNG=true;});
  await connectNextGraph(p);assert.match(await p.locator('.rs-nextgraph-error').innerText(),/Wallet cancelled/);
  assert.equal(await p.locator('.rs-choose-nextgraph').isEnabled(),true);

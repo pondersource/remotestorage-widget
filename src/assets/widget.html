@@ -56,6 +56,7 @@
     </symbol>
   </svg>
   <div class="rs-widget-icon">
+    <svg class="rs-main-logo rs-provider-main-logo rs-atomic-mark" role="img" aria-label="Atomic storage" focusable="false"><use href="#rs-provider-atomic"></use></svg>
     <svg class="rs-main-logo rs-provider-main-logo rs-lws-mark" role="img" aria-label="LWS storage" focusable="false"><use href="#rs-provider-lws"></use></svg>
     <svg class="rs-main-logo rs-provider-main-logo rs-onedrive-mark" role="img" aria-label="OneDrive storage" focusable="false"><use href="#rs-provider-onedrive"></use></svg>
     <svg class="rs-main-logo rs-provider-main-logo rs-nextgraph-mark" role="img" aria-label="NextGraph storage" focusable="false"><use href="#rs-provider-nextgraph"></use></svg>
@@ -534,7 +535,7 @@
         </button>
         <button class="rs-button rs-button-big rs-choose-atomic" type="button">
           <svg aria-hidden="true" focusable="false"><use href="#rs-provider-atomic"></use></svg>
-          <div>AtomicServer</div>
+          <div>Atomic</div>
         </button>
         <button class="rs-button rs-button-big rs-choose-nextgraph" type="button">
           <svg aria-hidden="true" focusable="false"><use href="#rs-provider-nextgraph"></use></svg>
@@ -583,11 +584,27 @@
     </div>
   </div>
 
+  <div class="rs-box rs-box-atomic" aria-hidden="true">
+    <div class="rs-content">
+      <form class="rs-atomic-form">
+        <h1 class="rs-big-headline">Connect Atomic</h1>
+        <label for="rs-atomic-server">Atomic server URL</label>
+        <input id="rs-atomic-server" name="rs-atomic-server" type="url" required>
+        <label for="rs-atomic-drive">Atomic drive DID or link</label>
+        <input id="rs-atomic-drive" name="rs-atomic-drive" required autocomplete="off">
+        <button type="submit" class="rs-atomic-connect">Create app key</button>
+        <a class="rs-atomic-approve" target="_blank" rel="noopener noreferrer" hidden>Open Atomic to approve</a>
+        <p role="status"></p>
+        <p role="alert"></p>
+        <button type="button" class="rs-button rs-atomic-back">Other storage</button>
+      </form>
+    </div>
+  </div>
+
   <div class="rs-box rs-box-sign-in" aria-hidden="true">
     <div class="rs-content">
       <form name="rs-sign-in-form" class="rs-sign-in-form">
         <h1 class="rs-big-headline">Connect your storage</h1>
-        <p class="rs-atomic-help" hidden>Enter the storage address from your Atomic remoteStorage installation. Your server will ask you to approve access.</p>
         <input type="text" name="rs-user-address" placeholder="user@provider.com" autocomplete="username" autocapitalize="off" spellcheck="false">
         <div class="rs-sign-in-error rs-hidden"></div>
         <button type="submit" class="rs-connect">Connect</button>
